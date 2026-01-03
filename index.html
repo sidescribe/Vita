@@ -236,6 +236,25 @@
         } catch (e) {
           console.error('New day error', e);
         }
+        async function completeWorkout() {
+  const storage = makeStorage();
+  const nd = { 
+    ...data, 
+    workoutType: workout.type, 
+    workoutDone: true, 
+    miles: (workout.type === 'running' ? miles : undefined), 
+    weights: (workout.type !== 'running' ? weights : undefined) 
+  };
+  setData(JSON.parse(JSON.stringify(nd)));
+  await save(nd);
+  const idx = rotation.indexOf(workout.type);
+  const next = { type: rotation[(idx + 1) % rotation.length], var: 0 };
+  setWorkout(next);
+  setWeights({});
+  setMiles('');
+  await storage.set('workout-rotation', JSON.stringify(next));
+}
+
       }
 
       function toggle(id) {
