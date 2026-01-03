@@ -279,6 +279,91 @@
           </div>
         );
       }
+// WORKOUTS VIEW
+if (view === 'workouts') {
+  const ex = workout.type === 'running' ? null : exercises[workout.type][workout.var];
+  return (
+    <div className="min-h-screen p-4">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-4xl font-bold mb-4 text-center">Vita</h1>
+        <div className="flex gap-2 justify-center mb-6">
+          <button onClick={() => setView('today')} className="px-6 py-2 bg-slate-700 rounded-lg">Today</button>
+          <button onClick={() => setView('progress')} className="px-6 py-2 bg-slate-700 rounded-lg">Progress</button>
+          <button onClick={() => setView('workouts')} className="px-6 py-2 bg-amber-600 text-white rounded-lg">Workouts</button>
+        </div>
+        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h2 className="text-2xl font-bold">Today: {labels[workout.type]}</h2>
+              <p className="text-sm text-gray-400">Next: {labels[rotation[(rotation.indexOf(workout.type) + 1) % 4]]}</p>
+            </div>
+            {workout.type !== 'running' && <button onClick={genNew} className="px-4 py-2 bg-slate-700 rounded">New Exercises</button>}
+          </div>
+          {workout.type === 'running' ? (
+            <div className="space-y-4">
+              <input type="number" step="0.1" value={miles} onChange={(e) => setMiles(e.target.value)} placeholder="Miles run" className="w-full p-3 bg-slate-700 rounded" />
+              <button onClick={completeWorkout} disabled={!miles || data.workoutDone} className="w-full py-3 bg-green-600 rounded font-semibold disabled:bg-slate-600">{data.workoutDone ? '✓ Done' : 'Complete'}</button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {ex.map((e, i) => (
+                <div key={i} className="bg-slate-700 rounded-lg p-4">
+                  <div className="font-medium mb-2">{e}</div>
+                  <input type="number" placeholder="Weight (lbs)" value={weights[e] || ''} onChange={(ev) => setWeights({...weights, [e]: ev.target.value})} className="w-full p-2 bg-slate-600 rounded text-sm" />
+                </div>
+              ))}
+              <button onClick={completeWorkout} disabled={data.workoutDone} className="w-full py-3 bg-green-600 rounded font-semibold disabled:bg-slate-600">{data.workoutDone ? '✓ Done' : 'Complete'}</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// PROGRESS VIEW
+if (view === 'progress') {
+  const rate = history.length > 0 ? Math.round((history.reduce((s, d) => s + d.done.length, 0) / (history.length * 18)) * 100) : 0;
+  return (
+    <div className="min-h-screen p-4">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-4xl font-bold mb-4 text-center">Vita</h1>
+        <div className="flex gap-2 justify-center mb-6">
+          <button onClick={() => setView('today')} className="px-6 py-2 bg-slate-700 rounded-lg">Today</button>
+          <button onClick={() => setView('progress')} className="px-6 py-2 bg-amber-600 text-white rounded-lg">Progress</button>
+          <button onClick={() => setView('workouts')} className="px-6 py-2 bg-slate-700 rounded-lg">Workouts</button>
+        </div>
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+            <p className="text-sm mb-2">Completion</p>
+            <p className="text-4xl font-bold">{rate}%</p>
+          </div>
+          <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+            <p className="text-sm mb-2">Days</p>
+            <p className="text-4xl font-bold">{history.length}</p>
+          </div>
+        </div>
+        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+          <h2 className="text-xl font-bold mb-4">Last 7 Days</h2>
+          {history.slice(0, 7).map(d => {
+            const pct = Math.round((d.done.length / 18) * 100);
+            return (
+              <div key={d.date} className="bg-slate-700 rounded-lg p-4 mb-3 cursor-pointer" onClick={() => setViewingDay(d)}>
+                <div className="flex justify-between mb-2">
+                  <span>{new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                  <span className="text-amber-400">{pct}%</span>
+                </div>
+                <div className="w-full bg-slate-600 rounded-full h-2">
+                  <div className="bg-amber-500 h-2 rounded-full" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
 
       const total = 18;
       const done = data.done ? data.done.length : 0;
