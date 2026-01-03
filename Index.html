@@ -23,9 +23,6 @@
   <script type="text/babel">
     const { useState, useEffect } = React;
 
-    // IMPORTANT FIX:
-    // Use the local date (YYYY-MM-DD) instead of toISOString() which yields UTC date.
-    // When the user's local time and UTC cross a midnight boundary, toISOString() can return the previous day.
     function getTodayLocal() {
       const d = new Date();
       const y = d.getFullYear();
@@ -36,7 +33,6 @@
 
     function VitaApp() {
       const [view, setView] = useState('today');
-      // compute once per app load
       const today = getTodayLocal();
 
       const [data, setData] = useState(null);
@@ -52,6 +48,7 @@
       const [history, setHistory] = useState([]);
       const [viewingDay, setViewingDay] = useState(null);
       const [saveStatus, setSaveStatus] = useState('');
+      const [isExisting, setIsExisting] = useState(false);
 
       const rotation = ['back-biceps', 'legs', 'chest-triceps', 'running'];
 
@@ -99,7 +96,6 @@
 
       const labels = { 'back-biceps': 'Back & Biceps', 'legs': 'Legs', 'chest-triceps': 'Chest & Triceps', 'running': 'Running' };
 
-      // storage helper (use platform window.storage if present, else fallback to localStorage)
       function makeStorage() {
         if (window.storage && window.storage.get && window.storage.set && window.storage.list) {
           return window.storage;
@@ -127,13 +123,11 @@
         const storage = makeStorage();
         const initialData = { date: today, done: [], journal: '', water: 0, saas: '', deepWork: '', talks: '', miles: '', weights: {}, mood: null, workoutDone: false };
         try {
-          // load today's data (IMPORTANT: uses local 'today' computed above)
           const td = await storage.get(`day:${today}`);
           if (td && td.value) {
             const raw = (typeof td.value === 'string') ? td.value : '';
             const d = JSON.parse(raw || '{}');
             const merged = { ...initialData, ...d };
-            // ensure we have a fresh object (avoid accidental shared references)
             setData(JSON.parse(JSON.stringify(merged)));
             setJournal(merged.journal || '');
             setWater(merged.water || 0);
@@ -142,8 +136,8 @@
             setTalks(merged.talks || '');
             setMiles(merged.miles || '');
             setWeights(merged.weights || {});
+            setIsExisting(true);
           } else {
-            // brand new day: start with a fresh object (no references to history entries)
             setData(initialData);
             setJournal('');
             setWater(0);
@@ -152,9 +146,9 @@
             setTalks('');
             setMiles('');
             setWeights({});
+            setIsExisting(false);
           }
 
-          // workout rotation
           const wr = await storage.get('workout-rotation');
           if (wr && wr.value) {
             try {
@@ -166,7 +160,6 @@
             setWorkout({ type: 'back-biceps', var: 0 });
           }
 
-          // history (read-only) — deep clone to avoid sharing object references with state
           const res = await storage.list('day:');
           if (res?.keys) {
             const hist = await Promise.all(res.keys.map(async k => {
@@ -179,7 +172,6 @@
                 return null;
               }
             }));
-            // deep clone parsed history to be safe
             setHistory(hist.filter(Boolean).map(h => JSON.parse(JSON.stringify(h))).sort((a, b) => new Date(b.date) - new Date(a.date)));
           } else {
             setHistory([]);
@@ -194,6 +186,22 @@
         }
       }
 
+      async function refreshHistory() {
+        const storage = makeStorage();
+        const res = await storage.list('day:');
+        if (res?.keys) {
+          const hist = await Promise.all(res.keys.map(async k => {
+            try {
+              const r = await storage.get(k);
+              if (!r) return null;
+              const raw = (typeof r.value === 'string') ? r.value : '';
+              return JSON.parse(raw || '{}');
+            } catch { return null; }
+          }));
+          setHistory(hist.filter(Boolean).map(h => JSON.parse(JSON.stringify(h))).sort((a,b) => new Date(b.date) - new Date(a.date)));
+        }
+      }
+
       async function save(d) {
         try {
           setSaveStatus('Saving…');
@@ -201,22 +209,32 @@
           await storage.set(`day:${today}`, JSON.stringify(d));
           setSaveStatus('Saved ✓');
           setTimeout(() => setSaveStatus(''), 2000);
-
-          // refresh history (deep clone as above)
-          const res = await storage.list('day:');
-          if (res?.keys) {
-            const hist = await Promise.all(res.keys.map(async k => {
-              try {
-                const r = await storage.get(k);
-                if (!r) return null;
-                const raw = (typeof r.value === 'string') ? r.value : '';
-                return JSON.parse(raw || '{}');
-              } catch { return null; }
-            }));
-            setHistory(hist.filter(Boolean).map(h => JSON.parse(JSON.stringify(h))).sort((a,b) => new Date(b.date) - new Date(a.date)));
-          }
+          await refreshHistory();
+          setIsExisting(true);
         } catch (e) {
           console.error('Save error', e);
+        }
+      }
+
+      async function startNewDay() {
+        if (!window.confirm('Start a new day? This will snapshot and save the current entry, then reset Today to a fresh entry.')) return;
+        const storage = makeStorage();
+        try {
+          // save current data under its date (if any)
+          if (data && data.date) {
+            await storage.set(`day:${data.date}`, JSON.stringify(data));
+          }
+          // create fresh day object for today
+          const newData = { date: today, done: [], journal: '', water: 0, saas: '', deepWork: '', talks: '', miles: '', weights: {}, mood: null, workoutDone: false };
+          setData(JSON.parse(JSON.stringify(newData)));
+          setJournal(''); setWater(0); setSaas(''); setDeepWork(''); setTalks(''); setMiles(''); setWeights({});
+          await storage.set(`day:${today}`, JSON.stringify(newData));
+          await refreshHistory();
+          setIsExisting(false);
+          setSaveStatus('New day started');
+          setTimeout(() => setSaveStatus(''), 2000);
+        } catch (e) {
+          console.error('New day error', e);
         }
       }
 
@@ -224,7 +242,6 @@
         if (!data) return;
         const done = data.done.includes(id) ? data.done.filter(x => x !== id) : [...data.done, id];
         const nd = { ...data, done };
-        // ensure we don't accidentally keep references from history objects
         setData(JSON.parse(JSON.stringify(nd)));
         save(nd);
       }
@@ -263,215 +280,25 @@
         );
       }
 
-      if (viewingDay) {
-        return (
-          <div className="min-h-screen p-4">
-            <div className="max-w-4xl mx-auto">
-              <div className="flex items-center justify-between mb-6">
-                <h1 className="text-3xl font-bold">{new Date(viewingDay.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</h1>
-                <button onClick={() => setViewingDay(null)} className="px-4 py-2 bg-slate-700 text-white rounded-lg">Back</button>
-              </div>
-
-              <div className="bg-slate-800 rounded-xl p-6 mb-4 border border-slate-700">
-                <h3 className="font-semibold mb-2">Mood</h3>
-                <p className="text-gray-300">{viewingDay.mood || 'Not logged'}</p>
-              </div>
-
-              <div className="bg-slate-800 rounded-xl p-6 mb-4 border border-slate-700">
-                <h3 className="font-semibold mb-2">Water Intake</h3>
-                <p className="text-blue-400 text-lg">{viewingDay.water || 0} glasses</p>
-              </div>
-
-              {viewingDay.workoutDone && (
-                <div className="bg-slate-800 rounded-xl p-6 mb-4 border border-slate-700">
-                  <h3 className="font-semibold mb-2">Workout</h3>
-                  <p className="text-amber-400">{labels[viewingDay.workoutType]}</p>
-                  {viewingDay.miles && <p className="text-gray-300 mt-1">{viewingDay.miles} miles</p>}
-                  {viewingDay.weights && Object.keys(viewingDay.weights).length > 0 && (
-                    <div className="mt-2 space-y-1">
-                      {Object.entries(viewingDay.weights).map(([ex, wt]) => (
-                        <p key={ex} className="text-sm text-gray-300">{ex}: {wt} lbs</p>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {viewingDay.saas && (
-                <div className="bg-slate-800 rounded-xl p-6 mb-4 border border-slate-700">
-                  <h3 className="font-semibold mb-2">SaaS Work</h3>
-                  <p className="text-gray-300 whitespace-pre-wrap">{viewingDay.saas}</p>
-                  {viewingDay.deepWork && <p className="text-sm text-gray-400 mt-2">Deep work: {viewingDay.deepWork} hrs</p>}
-                  {viewingDay.talks && <p className="text-sm text-gray-400">User conversations: {viewingDay.talks}</p>}
-                </div>
-              )}
-
-              <div className="bg-slate-800 rounded-xl p-6 mb-4 border border-slate-700">
-                <h3 className="font-semibold mb-3">Tasks Completed ({viewingDay.done.length}/18)</h3>
-                <div className="space-y-2">
-                  <div>
-                    <p className="text-sm text-gray-400 mb-1">Non-Negotiables:</p>
-                    {tasks.core.filter(t => viewingDay.done.includes(t.id)).map(t => (
-                      <p key={t.id} className="text-green-400 text-sm">✓ {t.t}</p>
-                    ))}
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-400 mb-1">Leadership:</p>
-                    {tasks.lead.filter(t => viewingDay.done.includes(t.id)).map(t => (
-                      <p key={t.id} className="text-amber-400 text-sm">✓ {t.t}</p>
-                    ))}
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-400 mb-1">Communication:</p>
-                    {tasks.comm.filter(t => viewingDay.done.includes(t.id)).map(t => (
-                      <p key={t.id} className="text-purple-400 text-sm">✓ {t.t}</p>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {viewingDay.journal && (
-                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-                  <h3 className="font-semibold mb-2">Reflection</h3>
-                  <p className="text-gray-300 whitespace-pre-wrap">{viewingDay.journal}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      }
-
-      if (view === 'workouts') {
-        const ex = (workout.type === 'running') ? null : (exercises[workout.type] ? exercises[workout.type][workout.var] : []);
-        return (
-          <div className="min-h-screen p-4">
-            <div className="max-w-4xl mx-auto">
-              <h1 className="text-4xl font-bold mb-4 text-center">Vita</h1>
-              <div className="flex gap-2 justify-center mb-6">
-                <button onClick={() => setView('today')} className="px-6 py-2 bg-slate-700 text-gray-300 rounded-lg">Today</button>
-                <button onClick={() => setView('progress')} className="px-6 py-2 bg-slate-700 text-gray-300 rounded-lg">Progress</button>
-                <button onClick={() => setView('workouts')} className="px-6 py-2 bg-amber-600 text-white rounded-lg">Workouts</button>
-              </div>
-
-              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mb-6">
-                <div className="flex justify-between items-center mb-4">
-                  <div>
-                    <h2 className="text-2xl font-bold">Today: {labels[workout.type]}</h2>
-                    <p className="text-sm text-gray-400">Next: {labels[rotation[(rotation.indexOf(workout.type) + 1) % rotation.length]]}</p>
-                  </div>
-                  {workout.type !== 'running' && <button onClick={genNew} className="px-4 py-2 bg-slate-700 text-white rounded-lg">🔁 New</button>}
-                </div>
-
-                {workout.type === 'running' ? (
-                  <div className="space-y-4">
-                    <div className="bg-slate-700 rounded-lg p-4">
-                      <label className="block text-sm text-gray-300 mb-2">Miles Run</label>
-                      <input type="number" step="0.1" value={miles} onChange={(e) => setMiles(e.target.value)} placeholder="5.0" className="w-full p-3 bg-slate-600 rounded-lg text-white" />
-                    </div>
-                    <button onClick={completeWorkout} disabled={!miles || data.workoutDone} className={"w-full py-3 text-white rounded-lg font-semibold " + (data.workoutDone || !miles ? 'bg-slate-600' : 'bg-green-600')}>
-                      {data.workoutDone ? '✓ Done' : 'Complete Run'}
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {ex.map((e, i) => (
-                      <div key={i} className="bg-slate-700 rounded-lg p-4">
-                        <div className="flex justify-between items-center mb-2">
-                          <div className="font-medium">{e}</div>
-                          <div className="text-amber-400">🏋️</div>
-                        </div>
-                        <input
-                          type="number"
-                          placeholder="Weight (lbs)"
-                          value={weights[e] || ''}
-                          onChange={(ev) => setWeights({...weights, [e]: ev.target.value})}
-                          className="w-full p-2 bg-slate-600 rounded text-white text-sm"
-                        />
-                      </div>
-                    ))}
-                    <button onClick={completeWorkout} disabled={data.workoutDone} className={"w-full py-3 text-white rounded-lg font-semibold " + (data.workoutDone ? 'bg-slate-600' : 'bg-green-600')}>
-                      {data.workoutDone ? '✓ Done' : 'Complete Workout'}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-                <h2 className="text-xl font-bold mb-4">Recent</h2>
-                {history.filter(d => d.workoutDone).slice(0, 5).map(d => (
-                  <div key={d.date} className="bg-slate-700 rounded-lg p-4 mb-2 flex justify-between items-center">
-                    <div>
-                      <p className="font-medium">{labels[d.workoutType]}</p>
-                      <p className="text-sm text-gray-400">{new Date(d.date).toLocaleDateString()}</p>
-                      {d.weights && Object.keys(d.weights).length > 0 && (
-                        <p className="text-xs text-gray-500 mt-1">Weights logged</p>
-                      )}
-                    </div>
-                    {d.miles && <span className="text-amber-400">{d.miles} mi</span>}
-                  </div>
-                ))}
-                {history.filter(d => d.workoutDone).length === 0 && <p className="text-gray-400 text-center py-4">No workouts yet</p>}
-              </div>
-            </div>
-          </div>
-        );
-      }
-
-      if (view === 'progress') {
-        const rate = history.length > 0 ? Math.round((history.reduce((s, d) => s + (d.done ? d.done.length : 0), 0) / (history.length * 18)) * 100) : 0;
-        return (
-          <div className="min-h-screen p-4">
-            <div className="max-w-4xl mx-auto">
-              <h1 className="text-4xl font-bold mb-4 text-center">Vita</h1>
-              <div className="flex gap-2 justify-center mb-6">
-                <button onClick={() => setView('today')} className="px-6 py-2 bg-slate-700 text-gray-300 rounded-lg">Today</button>
-                <button onClick={() => setView('progress')} className="px-6 py-2 bg-amber-600 text-white rounded-lg">Progress</button>
-                <button onClick={() => setView('workouts')} className="px-6 py-2 bg-slate-700 text-gray-300 rounded-lg">Workouts</button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-                  <p className="text-sm text-gray-300 mb-2">Completion</p>
-                  <p className="text-4xl font-bold">{rate}%</p>
-                </div>
-                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-                  <p className="text-sm text-gray-300 mb-2">Days</p>
-                  <p className="text-4xl font-bold">{history.length}</p>
-                </div>
-              </div>
-
-              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-                <h2 className="text-xl font-bold mb-4">Last 7 Days</h2>
-                {history.slice(0, 7).map(d => {
-                  const pct = Math.round(((d.done ? d.done.length : 0) / 18) * 100);
-                  return (
-                    <div key={d.date} className="bg-slate-700 rounded-lg p-4 mb-3 cursor-pointer hover:bg-slate-600" onClick={() => setViewingDay(d)}>
-                      <div className="flex justify-between mb-2">
-                        <span className="text-gray-300">{new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                        <span className="text-amber-400">{pct}%</span>
-                      </div>
-                      <div className="w-full bg-slate-600 rounded-full h-2">
-                        <div className="bg-amber-500 h-2 rounded-full" style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                  );
-                })}
-                {history.length === 0 && <p className="text-gray-400 text-center py-4">Start tracking</p>}
-              </div>
-            </div>
-          </div>
-        );
-      }
-
-      // default "today" view
       const total = 18;
       const done = data.done ? data.done.length : 0;
 
       return (
         <div className="min-h-screen p-4">
           <div className="max-w-4xl mx-auto">
-            <h1 className="text-4xl font-bold mb-2 text-center">Vita</h1>
-            <p className="text-sm text-gray-400 text-center mb-4">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <h1 className="text-4xl font-bold mb-1 text-center">Vita</h1>
+                <p className="text-sm text-gray-400 text-center">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`px-3 py-1 rounded-full text-sm ${isExisting ? 'bg-green-700 text-white' : 'bg-slate-700 text-gray-200'}`}>
+                  {isExisting ? 'Existing entry' : 'Fresh day'}
+                </div>
+                <button onClick={startNewDay} className="px-3 py-2 bg-slate-700 rounded text-sm">Start New Day</button>
+              </div>
+            </div>
+
             <div className="flex gap-2 justify-center mb-6">
               <button onClick={() => setView('today')} className="px-6 py-2 bg-amber-600 text-white rounded-lg">Today</button>
               <button onClick={() => setView('progress')} className="px-6 py-2 bg-slate-700 text-gray-300 rounded-lg">Progress</button>
@@ -561,9 +388,12 @@
               <textarea value={journal} onChange={e => setJournal(e.target.value)} onBlur={() => { const nd = { ...data, journal }; setData(JSON.parse(JSON.stringify(nd))); save(nd); }} placeholder="What did I lead? What did I ship? How did I grow?" className="w-full p-3 bg-slate-700 rounded text-white" rows="4" />
               <div className="mt-3 flex items-center justify-between">
                 <div className="text-sm text-gray-400">{saveStatus}</div>
-                <button onClick={() => { const nd = { ...data, journal }; setData(JSON.parse(JSON.stringify(nd))); save(nd); }} className="px-4 py-2 bg-slate-700 rounded">Save</button>
+                <div className="flex gap-2">
+                  <button onClick={() => { const nd = { ...data, journal }; setData(JSON.parse(JSON.stringify(nd))); save(nd); }} className="px-4 py-2 bg-slate-700 rounded">Save</button>
+                </div>
               </div>
             </div>
+
           </div>
         </div>
       );
