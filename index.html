@@ -1,18 +1,14 @@
 <!doctype html>
+
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Vita — Simple Tracker</title>
-
-  <!-- Tailwind (Play CDN for quick demo) -->
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- React (UMD) + Babel for in-browser JSX transform (quick demo) -->
   <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
   <style>
     body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
   </style>
@@ -34,7 +30,6 @@
     function VitaApp() {
       const [view, setView] = useState('today');
       const today = getTodayLocal();
-
       const [data, setData] = useState(null);
       const [loading, setLoading] = useState(true);
       const [journal, setJournal] = useState('');
@@ -220,11 +215,9 @@
         if (!window.confirm('Start a new day? This will snapshot and save the current entry, then reset Today to a fresh entry.')) return;
         const storage = makeStorage();
         try {
-          // save current data under its date (if any)
           if (data && data.date) {
             await storage.set(`day:${data.date}`, JSON.stringify(data));
           }
-          // create fresh day object for today
           const newData = { date: today, done: [], journal: '', water: 0, saas: '', deepWork: '', talks: '', miles: '', weights: {}, mood: null, workoutDone: false };
           setData(JSON.parse(JSON.stringify(newData)));
           setJournal(''); setWater(0); setSaas(''); setDeepWork(''); setTalks(''); setMiles(''); setWeights({});
@@ -236,27 +229,25 @@
         } catch (e) {
           console.error('New day error', e);
         }
-        async function completeWorkout() {
-  const storage = makeStorage();
-  const nd = { 
-    ...data, 
-    workoutType: workout.type, 
-    workoutDone: true, 
-    miles: (workout.type === 'running' ? miles : undefined), 
-    weights: (workout.type !== 'running' ? weights : undefined) 
-  };
-  setData(JSON.parse(JSON.stringify(nd)));
-  await save(nd);
-  const idx = rotation.indexOf(workout.type);
-  const next = { type: rotation[(idx + 1) % rotation.length], var: 0 };
-  setWorkout(next);
-  setWeights({});
-  setMiles('');
-  await storage.set('workout-rotation', JSON.stringify(next));
-}
-next));
-}
+      }
 
+      async function completeWorkout() {
+        const storage = makeStorage();
+        const nd = { 
+          ...data, 
+          workoutType: workout.type, 
+          workoutDone: true, 
+          miles: (workout.type === 'running' ? miles : undefined), 
+          weights: (workout.type !== 'running' ? weights : undefined) 
+        };
+        setData(JSON.parse(JSON.stringify(nd)));
+        await save(nd);
+        const idx = rotation.indexOf(workout.type);
+        const next = { type: rotation[(idx + 1) % rotation.length], var: 0 };
+        setWorkout(next);
+        setWeights({});
+        setMiles('');
+        await storage.set('workout-rotation', JSON.stringify(next));
       }
 
       function toggle(id) {
@@ -275,18 +266,6 @@ next));
         save(nd);
       }
 
-      async function completeWorkout() {
-        const storage = makeStorage();
-        const nd = { ...data, workoutType: workout.type, workoutDone: true, miles: (workout.type === 'running' ? miles : undefined), weights: (workout.type !== 'running' ? weights : undefined) };
-        setData(JSON.parse(JSON.stringify(nd)));
-        await save(nd);
-        const idx = rotation.indexOf(workout.type);
-        const next = { type: rotation[(idx + 1) % rotation.length], var: 0 };
-        setWorkout(next);
-        setWeights({});
-        await storage.set('workout-rotation', JSON.stringify(next));
-      }
-
       function genNew() {
         if (!workout || workout.type === 'running') return;
         const vars = exercises[workout.type] || [];
@@ -300,91 +279,90 @@ next));
           </div>
         );
       }
-// WORKOUTS VIEW
-if (view === 'workouts') {
-  const ex = workout.type === 'running' ? null : exercises[workout.type][workout.var];
-  return (
-    <div className="min-h-screen p-4">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl font-bold mb-4 text-center">Vita</h1>
-        <div className="flex gap-2 justify-center mb-6">
-          <button onClick={() => setView('today')} className="px-6 py-2 bg-slate-700 rounded-lg">Today</button>
-          <button onClick={() => setView('progress')} className="px-6 py-2 bg-slate-700 rounded-lg">Progress</button>
-          <button onClick={() => setView('workouts')} className="px-6 py-2 bg-amber-600 text-white rounded-lg">Workouts</button>
-        </div>
-        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <div>
-              <h2 className="text-2xl font-bold">Today: {labels[workout.type]}</h2>
-              <p className="text-sm text-gray-400">Next: {labels[rotation[(rotation.indexOf(workout.type) + 1) % 4]]}</p>
-            </div>
-            {workout.type !== 'running' && <button onClick={genNew} className="px-4 py-2 bg-slate-700 rounded">New Exercises</button>}
-          </div>
-          {workout.type === 'running' ? (
-            <div className="space-y-4">
-              <input type="number" step="0.1" value={miles} onChange={(e) => setMiles(e.target.value)} placeholder="Miles run" className="w-full p-3 bg-slate-700 rounded" />
-              <button onClick={completeWorkout} disabled={!miles || data.workoutDone} className="w-full py-3 bg-green-600 rounded font-semibold disabled:bg-slate-600">{data.workoutDone ? '✓ Done' : 'Complete'}</button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {ex.map((e, i) => (
-                <div key={i} className="bg-slate-700 rounded-lg p-4">
-                  <div className="font-medium mb-2">{e}</div>
-                  <input type="number" placeholder="Weight (lbs)" value={weights[e] || ''} onChange={(ev) => setWeights({...weights, [e]: ev.target.value})} className="w-full p-2 bg-slate-600 rounded text-sm" />
-                </div>
-              ))}
-              <button onClick={completeWorkout} disabled={data.workoutDone} className="w-full py-3 bg-green-600 rounded font-semibold disabled:bg-slate-600">{data.workoutDone ? '✓ Done' : 'Complete'}</button>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
-// PROGRESS VIEW
-if (view === 'progress') {
-  const rate = history.length > 0 ? Math.round((history.reduce((s, d) => s + d.done.length, 0) / (history.length * 18)) * 100) : 0;
-  return (
-    <div className="min-h-screen p-4">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl font-bold mb-4 text-center">Vita</h1>
-        <div className="flex gap-2 justify-center mb-6">
-          <button onClick={() => setView('today')} className="px-6 py-2 bg-slate-700 rounded-lg">Today</button>
-          <button onClick={() => setView('progress')} className="px-6 py-2 bg-amber-600 text-white rounded-lg">Progress</button>
-          <button onClick={() => setView('workouts')} className="px-6 py-2 bg-slate-700 rounded-lg">Workouts</button>
-        </div>
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-            <p className="text-sm mb-2">Completion</p>
-            <p className="text-4xl font-bold">{rate}%</p>
-          </div>
-          <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-            <p className="text-sm mb-2">Days</p>
-            <p className="text-4xl font-bold">{history.length}</p>
-          </div>
-        </div>
-        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-          <h2 className="text-xl font-bold mb-4">Last 7 Days</h2>
-          {history.slice(0, 7).map(d => {
-            const pct = Math.round((d.done.length / 18) * 100);
-            return (
-              <div key={d.date} className="bg-slate-700 rounded-lg p-4 mb-3 cursor-pointer" onClick={() => setViewingDay(d)}>
-                <div className="flex justify-between mb-2">
-                  <span>{new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                  <span className="text-amber-400">{pct}%</span>
+      if (view === 'workouts') {
+        const ex = workout.type === 'running' ? null : exercises[workout.type][workout.var];
+        return (
+          <div className="min-h-screen p-4">
+            <div className="max-w-4xl mx-auto">
+              <h1 className="text-4xl font-bold mb-4 text-center">Vita</h1>
+              <div className="flex gap-2 justify-center mb-6">
+                <button onClick={() => setView('today')} className="px-6 py-2 bg-slate-700 rounded-lg">Today</button>
+                <button onClick={() => setView('progress')} className="px-6 py-2 bg-slate-700 rounded-lg">Progress</button>
+                <button onClick={() => setView('workouts')} className="px-6 py-2 bg-amber-600 text-white rounded-lg">Workouts</button>
+              </div>
+              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mb-6">
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <h2 className="text-2xl font-bold">Today: {labels[workout.type]}</h2>
+                    <p className="text-sm text-gray-400">Next: {labels[rotation[(rotation.indexOf(workout.type) + 1) % 4]]}</p>
+                  </div>
+                  {workout.type !== 'running' && <button onClick={genNew} className="px-4 py-2 bg-slate-700 rounded">New Exercises</button>}
                 </div>
-                <div className="w-full bg-slate-600 rounded-full h-2">
-                  <div className="bg-amber-500 h-2 rounded-full" style={{ width: `${pct}%` }} />
+                {workout.type === 'running' ? (
+                  <div className="space-y-4">
+                    <input type="number" step="0.1" value={miles} onChange={(e) => setMiles(e.target.value)} placeholder="Miles run" className="w-full p-3 bg-slate-700 rounded text-white" />
+                    <button onClick={completeWorkout} disabled={!miles || data.workoutDone} className="w-full py-3 bg-green-600 rounded font-semibold disabled:bg-slate-600">{data.workoutDone ? '✓ Done' : 'Complete'}</button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {ex.map((e, i) => (
+                      <div key={i} className="bg-slate-700 rounded-lg p-4">
+                        <div className="font-medium mb-2">{e}</div>
+                        <input type="number" placeholder="Weight (lbs)" value={weights[e] || ''} onChange={(ev) => setWeights({...weights, [e]: ev.target.value})} className="w-full p-2 bg-slate-600 rounded text-sm text-white" />
+                      </div>
+                    ))}
+                    <button onClick={completeWorkout} disabled={data.workoutDone} className="w-full py-3 bg-green-600 rounded font-semibold disabled:bg-slate-600">{data.workoutDone ? '✓ Done' : 'Complete'}</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      if (view === 'progress') {
+        const rate = history.length > 0 ? Math.round((history.reduce((s, d) => s + d.done.length, 0) / (history.length * 18)) * 100) : 0;
+        return (
+          <div className="min-h-screen p-4">
+            <div className="max-w-4xl mx-auto">
+              <h1 className="text-4xl font-bold mb-4 text-center">Vita</h1>
+              <div className="flex gap-2 justify-center mb-6">
+                <button onClick={() => setView('today')} className="px-6 py-2 bg-slate-700 rounded-lg">Today</button>
+                <button onClick={() => setView('progress')} className="px-6 py-2 bg-amber-600 text-white rounded-lg">Progress</button>
+                <button onClick={() => setView('workouts')} className="px-6 py-2 bg-slate-700 rounded-lg">Workouts</button>
+              </div>
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                  <p className="text-sm mb-2">Completion</p>
+                  <p className="text-4xl font-bold">{rate}%</p>
+                </div>
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                  <p className="text-sm mb-2">Days</p>
+                  <p className="text-4xl font-bold">{history.length}</p>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
+              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <h2 className="text-xl font-bold mb-4">Last 7 Days</h2>
+                {history.slice(0, 7).map(d => {
+                  const pct = Math.round((d.done.length / 18) * 100);
+                  return (
+                    <div key={d.date} className="bg-slate-700 rounded-lg p-4 mb-3 cursor-pointer" onClick={() => setViewingDay(d)}>
+                      <div className="flex justify-between mb-2">
+                        <span>{new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                        <span className="text-amber-400">{pct}%</span>
+                      </div>
+                      <div className="w-full bg-slate-600 rounded-full h-2">
+                        <div className="bg-amber-500 h-2 rounded-full" style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      }
 
       const total = 18;
       const done = data.done ? data.done.length : 0;
@@ -393,17 +371,19 @@ if (view === 'progress') {
         <div className="min-h-screen p-4">
           <div className="max-w-4xl mx-auto">
             <div className="flex items-center justify-between mb-2">
-              <div>
-                <h1 className="text-4xl font-bold mb-1 text-center">Vita</h1>
-                <p className="text-sm text-gray-400 text-center">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+              <div className="flex-1">
+                <h1 className="text-4xl font-bold mb-1">Vita</h1>
+                <p className="text-sm text-gray-400">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
               </div>
               <div className="flex items-center gap-2">
                 <div className={`px-3 py-1 rounded-full text-sm ${isExisting ? 'bg-green-700 text-white' : 'bg-slate-700 text-gray-200'}`}>
-                  {isExisting ? 'Existing entry' : 'Fresh day'}
+                  {isExisting ? 'Existing' : 'Fresh'}
                 </div>
-                <button onClick={startNewDay} className="px-3 py-2 bg-slate-700 rounded text-sm">Start New Day</button>
+                <button onClick={startNewDay} className="px-3 py-2 bg-slate-700 rounded text-sm">New Day</button>
               </div>
             </div>
+
+            {saveStatus && <p className="text-center text-sm text-green-400 mb-2">{saveStatus}</p>}
 
             <div className="flex gap-2 justify-center mb-6">
               <button onClick={() => setView('today')} className="px-6 py-2 bg-amber-600 text-white rounded-lg">Today</button>
@@ -448,8 +428,8 @@ if (view === 'progress') {
               <div className="flex items-center gap-2 mb-3">💻<span>SaaS Work</span></div>
               <textarea value={saas} onChange={e => setSaas(e.target.value)} onBlur={() => { const nd = { ...data, saas }; setData(JSON.parse(JSON.stringify(nd))); save(nd); }} placeholder="What did you work on today?" className="w-full p-3 bg-slate-700 rounded text-white mb-3" rows="3" />
               <div className="grid grid-cols-2 gap-3">
-                <input type="number" step="0.5" value={deepWork} onChange={e => setDeepWork(e.target.value)} onBlur={() => { const nd = { ...data, deepWork }; setData(JSON.parse(JSON.stringify(nd))); save(nd); }} placeholder="Deep work (hrs)" className="p-3 bg-slate-700 rounded" />
-                <input type="number" value={talks} onChange={e => setTalks(e.target.value)} onBlur={() => { const nd = { ...data, talks }; setData(JSON.parse(JSON.stringify(nd))); save(nd); }} placeholder="User talks" className="p-3 bg-slate-700 rounded" />
+                <input type="number" step="0.5" value={deepWork} onChange={e => setDeepWork(e.target.value)} onBlur={() => { const nd = { ...data, deepWork }; setData(JSON.parse(JSON.stringify(nd))); save(nd); }} placeholder="Deep work (hrs)" className="p-3 bg-slate-700 rounded text-white" />
+                <input type="number" value={talks} onChange={e => setTalks(e.target.value)} onBlur={() => { const nd = { ...data, talks }; setData(JSON.parse(JSON.stringify(nd))); save(nd); }} placeholder="User talks" className="p-3 bg-slate-700 rounded text-white" />
               </div>
             </div>
 
@@ -492,12 +472,6 @@ if (view === 'progress') {
             <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
               <div className="flex items-center gap-2 mb-3">📚<span>Reflection</span></div>
               <textarea value={journal} onChange={e => setJournal(e.target.value)} onBlur={() => { const nd = { ...data, journal }; setData(JSON.parse(JSON.stringify(nd))); save(nd); }} placeholder="What did I lead? What did I ship? How did I grow?" className="w-full p-3 bg-slate-700 rounded text-white" rows="4" />
-              <div className="mt-3 flex items-center justify-between">
-                <div className="text-sm text-gray-400">{saveStatus}</div>
-                <div className="flex gap-2">
-                  <button onClick={() => { const nd = { ...data, journal }; setData(JSON.parse(JSON.stringify(nd))); save(nd); }} className="px-4 py-2 bg-slate-700 rounded">Save</button>
-                </div>
-              </div>
             </div>
 
           </div>
@@ -507,5 +481,6 @@ if (view === 'progress') {
 
     ReactDOM.render(<VitaApp />, document.getElementById('root'));
   </script>
+
 </body>
 </html>
