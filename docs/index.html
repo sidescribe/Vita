@@ -117,6 +117,18 @@
 
       useEffect(() => { loadData(); }, []);
 
+      // Load nutrition data on component mount
+      useEffect(() => {
+        const saved = localStorage.getItem('vita-nutrition');
+        if (saved) {
+          try {
+            setNutritionData(JSON.parse(saved));
+          } catch (e) {
+            console.error('Error loading nutrition data:', e);
+          }
+        }
+      }, []);
+
       async function loadData() {
         setLoading(true);
         const storage = makeStorage();
@@ -1155,18 +1167,6 @@
           setNutritionData(updatedNutrition);
           localStorage.setItem('vita-nutrition', JSON.stringify(updatedNutrition));
         };
-
-        // Load nutrition data on component mount
-        useEffect(() => {
-          const saved = localStorage.getItem('vita-nutrition');
-          if (saved) {
-            try {
-              setNutritionData(JSON.parse(saved));
-            } catch (e) {
-              console.error('Error loading nutrition data:', e);
-            }
-          }
-        }, []);
 
         console.log('About to return nutrition JSX', todaysMeals, dailyTotals);
 
