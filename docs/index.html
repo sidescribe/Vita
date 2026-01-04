@@ -1118,7 +1118,7 @@
           return allFoods.reduce((totals, food) => ({
             calories: totals.calories + (food.calories || 0),
             protein: totals.protein + (food.protein || 0),
-            carbs: totals.carbs + (food.carories || 0),
+            carbs: totals.carbs + (food.carbs || 0),
             fat: totals.fat + (food.fat || 0)
           }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
         };
@@ -1153,7 +1153,7 @@
         };
 
         // Load nutrition data on component mount
-        React.useEffect(() => {
+        useEffect(() => {
           const saved = localStorage.getItem('vita-nutrition');
           if (saved) {
             try {
