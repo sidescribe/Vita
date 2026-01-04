@@ -1109,9 +1109,7 @@
           ]
         };
 
-        // Complete state management
-        const [showAddFood, setShowAddFood] = useState(false);
-        const [selectedMeal, setSelectedMeal] = useState('breakfast');
+        // State management (already declared at component level)
 
         const todayKey = getTodayLocal();
         const todaysMeals = nutritionData[todayKey] || {
