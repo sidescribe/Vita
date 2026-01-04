@@ -48,7 +48,6 @@
       const [selectedMeal, setSelectedMeal] = useState('breakfast');
       const [saveStatus, setSaveStatus] = useState('');
       const [isExisting, setIsExisting] = useState(false);
-      const [dailySummary, setDailySummary] = useState('');
 
       const rotation = ['back-biceps', 'legs', 'chest-triceps', 'running'];
 
@@ -121,15 +120,15 @@
       async function loadData() {
         setLoading(true);
         const storage = makeStorage();
-        const initialData = { date: today, done: [], journal: '', water: 0, saas: '', deepWork: '', talks: '', miles: '', weights: {}, mood: null, workoutDone: false, dailySummary: '' };
+        const initialData = { date: today, done: [], journal: '', water: 0, saas: '', deepWork: '', talks: '', miles: '', weights: {}, mood: null, workoutDone: false };
         try {
           // Load today's data
-          try {
-            const td = await storage.get(`day:${today}`);
-            if (td && td.value) {
-              const raw = (typeof td.value === 'string') ? td.value : '';
-              const d = JSON.parse(raw || '{}');
-              const merged = { ...initialData, ...d };
+        try {
+          const td = await storage.get(`day:${today}`);
+          if (td && td.value) {
+            const raw = (typeof td.value === 'string') ? td.value : '';
+            const d = JSON.parse(raw || '{}');
+            const merged = { ...initialData, ...d };
               const cleanData = JSON.parse(JSON.stringify(merged));
               setData(cleanData);
               setJournal(cleanData.journal || '');
@@ -139,9 +138,8 @@
               setTalks(cleanData.talks || '');
               setMiles(cleanData.miles || '');
               setWeights(cleanData.weights || {});
-              setDailySummary(cleanData.dailySummary || '');
-              setIsExisting(true);
-            } else {
+            setIsExisting(true);
+          } else {
               setData(JSON.parse(JSON.stringify(initialData)));
               setJournal('');
               setWater(0);
@@ -150,7 +148,6 @@
               setTalks('');
               setMiles('');
               setWeights({});
-              setDailySummary('');
               setIsExisting(false);
             }
           } catch (e) {
@@ -168,8 +165,8 @@
 
           // Load workout rotation
           try {
-            const wr = await storage.get('workout-rotation');
-            if (wr && wr.value) {
+          const wr = await storage.get('workout-rotation');
+          if (wr && wr.value) {
               const workoutData = JSON.parse(wr.value);
               setWorkout(workoutData);
             } else {
@@ -195,13 +192,13 @@
       async function refreshHistory() {
         const storage = makeStorage();
         try {
-          const res = await storage.list('day:');
-          if (res?.keys) {
-            const hist = await Promise.all(res.keys.map(async k => {
-              try {
-                const r = await storage.get(k);
+        const res = await storage.list('day:');
+        if (res?.keys) {
+          const hist = await Promise.all(res.keys.map(async k => {
+            try {
+              const r = await storage.get(k);
                 if (!r || !r.value) return null;
-                const raw = (typeof r.value === 'string') ? r.value : '';
+              const raw = (typeof r.value === 'string') ? r.value : '';
                 const parsed = JSON.parse(raw || '{}');
                 // Ensure we have all fields for proper display
                 return {
@@ -216,8 +213,7 @@
                   weights: parsed.weights || {},
                   workoutDone: parsed.workoutDone || false,
                   workoutType: parsed.workoutType || null,
-                  mood: parsed.mood || null,
-                  dailySummary: parsed.dailySummary || ''
+                  mood: parsed.mood || null
                 };
               } catch (e) {
                 console.error('Error loading history item:', k, e);
@@ -260,9 +256,9 @@
           if (data && data.date) {
             await storage.set(`day:${data.date}`, JSON.stringify(data));
           }
-          const newData = { date: today, done: [], journal: '', water: 0, saas: '', deepWork: '', talks: '', miles: '', weights: {}, mood: null, workoutDone: false, dailySummary: '' };
+          const newData = { date: today, done: [], journal: '', water: 0, saas: '', deepWork: '', talks: '', miles: '', weights: {}, mood: null, workoutDone: false };
           setData(JSON.parse(JSON.stringify(newData)));
-          setJournal(''); setWater(0); setSaas(''); setDeepWork(''); setTalks(''); setMiles(''); setWeights({}); setDailySummary('');
+          setJournal(''); setWater(0); setSaas(''); setDeepWork(''); setTalks(''); setMiles(''); setWeights({});
           await storage.set(`day:${today}`, JSON.stringify(newData));
           await refreshHistory();
           setIsExisting(false);
@@ -286,11 +282,11 @@
           }
         }
 
-        const nd = {
-          ...data,
-          workoutType: workout.type,
-          workoutDone: true,
-          miles: (workout.type === 'running' ? miles : undefined),
+        const nd = { 
+          ...data, 
+          workoutType: workout.type, 
+          workoutDone: true, 
+          miles: (workout.type === 'running' ? miles : undefined), 
           weights: (workout.type !== 'running' ? { ...weights } : undefined),
           workoutExercises: (workout.type !== 'running' ? exercises[workout.type][workout.var] : undefined),
           workoutDate: new Date().toISOString()
@@ -1372,8 +1368,8 @@
                   <p className="text-sm mb-2">Workouts</p>
                   <p className="text-4xl font-bold">{history.filter(d => d.workoutDone).length}</p>
                   <p className="text-xs text-gray-400">completed</p>
-                </div>
-                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+              </div>
+              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
                   <p className="text-sm mb-2">This Week</p>
                   <p className="text-4xl font-bold">{history.slice(0, 7).filter(d => d.done.length > 0).length}</p>
                   <p className="text-xs text-gray-400">active days</p>
@@ -1447,7 +1443,7 @@
                              new Date(d.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                           </span>
                           {daysAgo > 1 && <span className="text-xs text-gray-500">({daysAgo} days ago)</span>}
-                        </div>
+                      </div>
                         <div className="flex items-center gap-2">
                           {d.workoutDone && <span className="text-green-400 text-sm">💪</span>}
                           <span className="text-amber-400 font-bold">{pct}%</span>
@@ -1467,7 +1463,7 @@
                   <div className="text-center py-8 text-gray-500">
                     <p className="text-lg mb-2">No history yet</p>
                     <p className="text-sm">Complete some tasks and they'll appear here!</p>
-                  </div>
+              </div>
                 )}
               </div>
 
@@ -1530,14 +1526,6 @@
                     </div>
                   </div>
 
-                  {viewingDay.dailySummary && (
-                    <div className="mb-4">
-                      <h3 className="font-bold mb-2">Daily Summary</h3>
-                      <div className="bg-slate-700 rounded p-3 text-sm text-gray-300">
-                        {viewingDay.dailySummary}
-                      </div>
-                    </div>
-                  )}
 
                   {viewingDay.journal && (
                     <div className="mb-4">
@@ -1617,6 +1605,30 @@
             </div>
 
             <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+              <h3 className="text-lg font-bold mb-4 text-center text-amber-400">💾 Save Today's Progress</h3>
+              <p className="text-sm text-gray-300 mb-4 text-center">
+                Save a complete snapshot of your day - all tasks, workouts, mood, and progress will be saved and viewable in your Progress history.
+              </p>
+              <button
+                onClick={async () => {
+                  const currentData = {
+                    ...data,
+                    date: today,
+                    lastSaved: new Date().toISOString()
+                  };
+                  const cleanData = JSON.parse(JSON.stringify(currentData));
+                  setData(cleanData);
+                  await save(cleanData);
+                  setSaveStatus('Today\'s progress saved! 📅');
+                  setTimeout(() => setSaveStatus(''), 3000);
+                }}
+                className="w-full py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors text-lg"
+              >
+                💾 Save Today's Progress
+              </button>
+            </div>
+
+            <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
               <h3 className="mb-3">Mood</h3>
               <div className="flex gap-2 flex-wrap">
                 {['😊 Sharp', '🙂 Good', '😐 Okay', '😔 Off', '😰 Hard'].map(m => (
@@ -1687,13 +1699,6 @@
               ))}
             </div>
 
-            <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
-              <div className="flex items-center gap-2 mb-3">📝<span>Daily Summary</span></div>
-              <textarea value={dailySummary} onChange={e => setDailySummary(e.target.value)} onBlur={async () => { const nd = { ...data, dailySummary }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} placeholder="Write a comprehensive summary of your day - what you accomplished, challenges faced, lessons learned, and how you grew..." className="w-full p-3 bg-slate-700 rounded text-white mb-3" rows="6" />
-              <button onClick={async () => { const nd = { ...data, dailySummary }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); setSaveStatus('Daily summary saved! ✓'); setTimeout(() => setSaveStatus(''), 2000); }} className="w-full py-2 bg-amber-600 text-white rounded-lg font-semibold hover:bg-amber-700 transition-colors">
-                Save Daily Summary
-              </button>
-            </div>
 
             <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
               <div className="flex items-center gap-2 mb-3">📚<span>Reflection</span></div>
