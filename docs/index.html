@@ -1063,7 +1063,9 @@
       }
 
       if (view === 'nutrition') {
-        // Food database with nutritional information
+        console.log('Nutrition view loaded');
+
+        // Complete food database
         const foodDatabase = {
           proteins: [
             { name: "Chicken Breast (4oz)", calories: 165, protein: 31, carbs: 0, fat: 3.6 },
@@ -1106,6 +1108,10 @@
             { name: "Jerky (1oz)", calories: 116, protein: 9, carbs: 3, fat: 7 }
           ]
         };
+
+        // Complete state management
+        const [showAddFood, setShowAddFood] = useState(false);
+        const [selectedMeal, setSelectedMeal] = useState('breakfast');
 
         const todayKey = getTodayLocal();
         const todaysMeals = nutritionData[todayKey] || {
@@ -1168,14 +1174,15 @@
           <div className="min-h-screen p-4">
             <div className="max-w-4xl mx-auto">
               <h1 className="text-4xl font-bold mb-4 text-center">Vita</h1>
-              <div className="flex gap-1 justify-center mb-6 flex-wrap">
-                <button onClick={() => setView('today')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Today</button>
-                <button onClick={() => setView('progress')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Progress</button>
-                <button onClick={() => setView('workouts')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Workouts</button>
-                <button onClick={() => setView('affirmations')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Affirmations</button>
-                <button onClick={() => setView('coach')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Coach</button>
-                <button onClick={() => setView('books')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Books</button>
-                <button onClick={() => setView('nutrition')} className="px-2 py-2 bg-amber-600 text-white rounded text-xs">Nutrition</button>
+
+              <div className="flex gap-2 justify-center mb-6 flex-wrap">
+                <button onClick={() => setView('today')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Today</button>
+                <button onClick={() => setView('progress')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Progress</button>
+                <button onClick={() => setView('workouts')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Workouts</button>
+                <button onClick={() => setView('affirmations')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Affirmations</button>
+                <button onClick={() => setView('coach')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Coach</button>
+                <button onClick={() => setView('books')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Books</button>
+                <button onClick={() => setView('nutrition')} className="px-3 py-2 bg-amber-600 text-white rounded-lg text-xs">Nutrition</button>
               </div>
 
               {/* Daily Totals */}
@@ -1248,7 +1255,7 @@
               {/* Add Food Modal */}
               {showAddFood && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                  <div className="bg-slate-800 rounded-xl p-6 w-full max-w-md border border-slate-700">
+                  <div className="bg-slate-800 rounded-xl p-6 w-full max-w-md border border-slate-700 max-h-96 overflow-y-auto">
                     <div className="flex justify-between items-center mb-4">
                       <h3 className="text-lg font-bold">Add Food</h3>
                       <button
@@ -1273,7 +1280,7 @@
                       </select>
                     </div>
 
-                    <div className="space-y-4 max-h-80 overflow-y-auto">
+                    <div className="space-y-4">
                       {Object.entries(foodDatabase).map(([category, foods]) => (
                         <div key={category}>
                           <h4 className="font-medium capitalize mb-2 text-amber-400">{category}</h4>
