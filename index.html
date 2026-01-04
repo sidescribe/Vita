@@ -43,6 +43,9 @@
       const [history, setHistory] = useState([]);
       const [viewingDay, setViewingDay] = useState(null);
       const [showAllHistory, setShowAllHistory] = useState(false);
+      const [nutritionData, setNutritionData] = useState({});
+      const [showAddFood, setShowAddFood] = useState(false);
+      const [selectedMeal, setSelectedMeal] = useState('breakfast');
       const [saveStatus, setSaveStatus] = useState('');
       const [isExisting, setIsExisting] = useState(false);
 
@@ -399,6 +402,903 @@
         );
       }
 
+      if (view === 'affirmations') {
+        // Personalized affirmations based on user's goals and progress
+        const affirmations = {
+          general: [
+            "I am becoming the best version of myself every day",
+            "I have the power to create the life I desire",
+            "Every challenge I face is an opportunity to grow stronger",
+            "I am worthy of success and happiness",
+            "My potential is limitless and I unlock it daily",
+            "I choose progress over perfection",
+            "I am grateful for my journey and excited for what comes next",
+            "I radiate confidence and positive energy",
+            "I am capable of achieving extraordinary things",
+            "Today, I choose to be unstoppable"
+          ],
+          productivity: [
+            "I am focused, disciplined, and productive in all my endeavors",
+            "Deep work is my superpower and I master it daily",
+            "I complete important tasks with ease and efficiency",
+            "My time is valuable and I use it wisely",
+            "I set clear goals and achieve them consistently",
+            "I am a master of my schedule and priorities",
+            "Procrastination has no power over me",
+            "I work with purpose and passion every day",
+            "My productivity creates lasting impact",
+            "I accomplish more than I thought possible"
+          ],
+          health: [
+            "My body is strong, healthy, and full of energy",
+            "I nourish my body with healthy choices",
+            "Every workout brings me closer to my ideal self",
+            "I am committed to my physical and mental wellbeing",
+            "Rest and recovery are essential parts of my strength",
+            "I treat my body with love and respect",
+            "My health is my foundation for success",
+            "I move my body with joy and purpose",
+            "I am grateful for my body's incredible capabilities",
+            "Healthy habits are my daily celebration of self-love"
+          ],
+          mindset: [
+            "I think positively and attract positive outcomes",
+            "Challenges are opportunities in disguise",
+            "I learn and grow from every experience",
+            "My mindset determines my reality",
+            "I choose faith over fear in every situation",
+            "I am resilient and bounce back stronger",
+            "My thoughts create my reality",
+            "I embrace change and adapt with grace",
+            "I am the author of my own story",
+            "Every day brings new possibilities and growth"
+          ],
+          leadership: [
+            "I lead with integrity and inspire others",
+            "My hard conversations create meaningful change",
+            "I own my mistakes and learn from them",
+            "I help others grow and succeed",
+            "I lead by example in all I do",
+            "My leadership creates positive impact",
+            "I communicate clearly and effectively",
+            "I build strong relationships and trust",
+            "I take initiative and responsibility",
+            "I am a force for positive change"
+          ]
+        };
+
+        // Get today's affirmation based on user's recent focus
+        const getTodaysAffirmation = () => {
+          const today = new Date();
+          const seed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
+
+          // Check recent activity to personalize
+          const recentTasks = history.slice(0, 3).flatMap(d => d.done || []);
+          const hasProductivity = recentTasks.some(t => ['deep', 'progress', 'priorities'].includes(t));
+          const hasLeadership = recentTasks.some(t => ['hard', 'own', 'help'].includes(t));
+          const hasWorkout = history.slice(0, 3).some(d => d.workoutDone);
+
+          let category = 'general';
+          if (hasProductivity && hasLeadership) category = 'leadership';
+          else if (hasProductivity) category = 'productivity';
+          else if (hasWorkout) category = 'health';
+          else if (Math.random() > 0.7) category = 'mindset';
+
+          const categoryAffirmations = affirmations[category];
+          return categoryAffirmations[seed % categoryAffirmations.length];
+        };
+
+        const todaysAffirmation = getTodaysAffirmation();
+        const affirmationCategory = todaysAffirmation.includes('productivity') || todaysAffirmation.includes('work') ? 'productivity' :
+                                   todaysAffirmation.includes('health') || todaysAffirmation.includes('body') ? 'health' :
+                                   todaysAffirmation.includes('leadership') || todaysAffirmation.includes('lead') ? 'leadership' :
+                                   todaysAffirmation.includes('mindset') || todaysAffirmation.includes('think') ? 'mindset' : 'general';
+
+        return (
+          <div className="min-h-screen p-4">
+            <div className="max-w-4xl mx-auto">
+              <h1 className="text-4xl font-bold mb-4 text-center">Vita</h1>
+              <div className="flex gap-2 justify-center mb-6 flex-wrap">
+                <button onClick={() => setView('today')} className="px-4 py-2 bg-slate-700 text-gray-300 rounded-lg text-sm">Today</button>
+                <button onClick={() => setView('progress')} className="px-4 py-2 bg-slate-700 text-gray-300 rounded-lg text-sm">Progress</button>
+                <button onClick={() => setView('workouts')} className="px-4 py-2 bg-slate-700 text-gray-300 rounded-lg text-sm">Workouts</button>
+                <button onClick={() => setView('affirmations')} className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm">Affirmations</button>
+              </div>
+
+              {/* Today's Main Affirmation */}
+              <div className="bg-slate-800 rounded-xl p-8 mb-6 border border-slate-700 text-center">
+                <div className="mb-4">
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    affirmationCategory === 'productivity' ? 'bg-blue-600' :
+                    affirmationCategory === 'health' ? 'bg-green-600' :
+                    affirmationCategory === 'leadership' ? 'bg-purple-600' :
+                    affirmationCategory === 'mindset' ? 'bg-yellow-600' :
+                    'bg-amber-600'
+                  } text-white`}>
+                    {affirmationCategory.charAt(0).toUpperCase() + affirmationCategory.slice(1)}
+                  </span>
+                </div>
+                <h2 className="text-2xl md:text-3xl font-bold text-white mb-4 leading-relaxed">
+                  "{todaysAffirmation}"
+                </h2>
+                <p className="text-gray-400 text-sm">Your affirmation for {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+              </div>
+
+              {/* Quick Affirmation Categories */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                  <h3 className="text-lg font-bold mb-3 text-blue-400">💼 Productivity</h3>
+                  <p className="text-sm text-gray-300 mb-3">{affirmations.productivity[Math.floor(Math.random() * affirmations.productivity.length)]}</p>
+                  <button className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
+                    Get New One
+                  </button>
+                </div>
+
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                  <h3 className="text-lg font-bold mb-3 text-green-400">💪 Health & Fitness</h3>
+                  <p className="text-sm text-gray-300 mb-3">{affirmations.health[Math.floor(Math.random() * affirmations.health.length)]}</p>
+                  <button className="w-full py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors">
+                    Get New One
+                  </button>
+                </div>
+
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                  <h3 className="text-lg font-bold mb-3 text-purple-400">👑 Leadership</h3>
+                  <p className="text-sm text-gray-300 mb-3">{affirmations.leadership[Math.floor(Math.random() * affirmations.leadership.length)]}</p>
+                  <button className="w-full py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 transition-colors">
+                    Get New One
+                  </button>
+                </div>
+
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                  <h3 className="text-lg font-bold mb-3 text-yellow-400">🧠 Mindset</h3>
+                  <p className="text-sm text-gray-300 mb-3">{affirmations.mindset[Math.floor(Math.random() * affirmations.mindset.length)]}</p>
+                  <button className="w-full py-2 bg-yellow-600 text-white rounded-lg text-sm hover:bg-yellow-700 transition-colors">
+                    Get New One
+                  </button>
+                </div>
+              </div>
+
+              {/* Inspiration Section */}
+              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <h3 className="text-lg font-bold mb-3">💡 Daily Inspiration</h3>
+                <div className="space-y-3 text-sm text-gray-300">
+                  <p><strong>Remember:</strong> Every expert was once a beginner. Every champion was once afraid to start.</p>
+                  <p><strong>Action:</strong> The bridge between your goals and accomplishment is your daily actions.</p>
+                  <p><strong>Growth:</strong> You're not competing with anyone else. You're competing with who you were yesterday.</p>
+                  <p><strong>Resilience:</strong> The only way to fail is to stop trying. Every setback is a setup for a comeback.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      if (view === 'coach') {
+        // Calculate streaks and insights
+        const calculateStreaks = () => {
+          const streaks = {
+            current: 0,
+            longest: 0,
+            workoutStreak: 0,
+            longestWorkout: 0
+          };
+
+          // Task completion streak
+          for (let i = 0; i < history.length; i++) {
+            if (history[i].done && history[i].done.length > 0) {
+              streaks.current++;
+            } else {
+              streaks.longest = Math.max(streaks.longest, streaks.current);
+              streaks.current = 0;
+            }
+          }
+          streaks.longest = Math.max(streaks.longest, streaks.current);
+
+          // Workout streak
+          for (let i = 0; i < history.length; i++) {
+            if (history[i].workoutDone) {
+              streaks.workoutStreak++;
+            } else {
+              streaks.longestWorkout = Math.max(streaks.longestWorkout, streaks.workoutStreak);
+              streaks.workoutStreak = 0;
+            }
+          }
+          streaks.longestWorkout = Math.max(streaks.longestWorkout, streaks.workoutStreak);
+
+          return streaks;
+        };
+
+        const streaks = calculateStreaks();
+        const todayTasks = data.done ? data.done.length : 0;
+        const avgTasks = history.length > 0 ? Math.round((history.reduce((s, d) => s + (d.done ? d.done.length : 0), 0) / history.length) * 10) / 10 : 0;
+
+        // Generate personalized coaching message
+        const getCoachingMessage = () => {
+          const messages = {
+            excellent: [
+              "🚀 INCREDIBLE! You're crushing it! Keep this momentum going!",
+              "💪 You're in BEAST MODE! This level of consistency is rare and valuable.",
+              "🌟 You're not just participating, you're DOMINATING your growth journey!",
+              "🏆 LEGENDARY performance! You're setting the standard for excellence."
+            ],
+            great: [
+              "🔥 Great work! You're building habits that will change your life.",
+              "💪 Solid progress! Consistency like yours creates extraordinary results.",
+              "🎯 You're on fire! Keep channeling this energy into your goals.",
+              "⭐ Excellent momentum! You're becoming the person you want to be."
+            ],
+            good: [
+              "👍 Good job! Every step forward counts. Keep building these habits.",
+              "💪 Steady progress! Small, consistent actions create big changes.",
+              "🎯 You're moving in the right direction. Stay focused on your goals.",
+              "⭐ Keep it up! You're developing habits that will serve you for life."
+            ],
+            needsImprovement: [
+              "💪 Let's get back on track! Remember why you started this journey.",
+              "🎯 Every champion has off days. Today is your chance to get back to winning.",
+              "🔥 Your future self is counting on you. Let's make today count!",
+              "💪 You've got this! One strong day can restart your momentum."
+            ]
+          };
+
+          if (streaks.current >= 7) return messages.excellent[Math.floor(Math.random() * messages.excellent.length)];
+          if (streaks.current >= 3) return messages.great[Math.floor(Math.random() * messages.great.length)];
+          if (todayTasks > 0) return messages.good[Math.floor(Math.random() * messages.good.length)];
+          return messages.needsImprovement[Math.floor(Math.random() * messages.needsImprovement.length)];
+        };
+
+        const coachingMessage = getCoachingMessage();
+
+        // Extended habit tracking beyond core tasks
+        const extendedHabits = [
+          { id: 'reading', name: 'Read for 30+ minutes', category: 'learning', streak: 0 },
+          { id: 'meditation', name: 'Meditate or mindfulness', category: 'mindfulness', streak: 0 },
+          { id: 'networking', name: 'Connect with someone meaningful', category: 'social', streak: 0 },
+          { id: 'learning', name: 'Learn something new (skill/course)', category: 'growth', streak: 0 },
+          { id: 'gratitude', name: 'Write 3 things grateful for', category: 'mindfulness', streak: 0 },
+          { id: 'planning', name: 'Review and plan tomorrow', category: 'productivity', streak: 0 }
+        ];
+
+        return (
+          <div className="min-h-screen p-4">
+            <div className="max-w-4xl mx-auto">
+              <h1 className="text-4xl font-bold mb-4 text-center">Vita</h1>
+              <div className="flex gap-2 justify-center mb-6 flex-wrap">
+                <button onClick={() => setView('today')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Today</button>
+                <button onClick={() => setView('progress')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Progress</button>
+                <button onClick={() => setView('workouts')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Workouts</button>
+                <button onClick={() => setView('affirmations')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Affirmations</button>
+                <button onClick={() => setView('coach')} className="px-3 py-2 bg-amber-600 text-white rounded-lg text-xs">Coach</button>
+              </div>
+
+              {/* Personalized Coaching Message */}
+              <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+                <h2 className="text-xl font-bold mb-4 text-center text-amber-400">🏆 Your Accountability Coach</h2>
+                <div className="text-center">
+                  <p className="text-lg text-white mb-4 leading-relaxed">{coachingMessage}</p>
+                  <div className="flex justify-center gap-4 text-sm">
+                    <div className="bg-slate-700 px-3 py-2 rounded">
+                      <span className="text-gray-400">Current Streak:</span>
+                      <span className="text-amber-400 font-bold ml-1">{streaks.current} days</span>
+                    </div>
+                    <div className="bg-slate-700 px-3 py-2 rounded">
+                      <span className="text-gray-400">Best Streak:</span>
+                      <span className="text-green-400 font-bold ml-1">{streaks.longest} days</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Today's Performance */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 text-center">
+                  <h3 className="text-sm font-bold text-gray-400 mb-2">Today's Tasks</h3>
+                  <p className="text-3xl font-bold text-amber-400">{todayTasks}/18</p>
+                  <p className="text-xs text-gray-500">completed</p>
+                </div>
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 text-center">
+                  <h3 className="text-sm font-bold text-gray-400 mb-2">Average Tasks</h3>
+                  <p className="text-3xl font-bold text-blue-400">{avgTasks}/18</p>
+                  <p className="text-xs text-gray-500">per day</p>
+                </div>
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 text-center">
+                  <h3 className="text-sm font-bold text-gray-400 mb-2">Workout Streak</h3>
+                  <p className="text-3xl font-bold text-green-400">{streaks.workoutStreak}</p>
+                  <p className="text-xs text-gray-500">days</p>
+                </div>
+              </div>
+
+              {/* Extended Habit Tracking */}
+              <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+                <h3 className="text-lg font-bold mb-4">🎯 Extended Habit Tracking</h3>
+                <p className="text-sm text-gray-400 mb-4">Track additional habits beyond your core tasks for comprehensive personal development.</p>
+                <div className="space-y-3">
+                  {extendedHabits.map(habit => (
+                    <div key={habit.id} className="bg-slate-700 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium">{habit.name}</span>
+                        <span className={`px-2 py-1 rounded text-xs ${
+                          habit.category === 'learning' ? 'bg-blue-600' :
+                          habit.category === 'mindfulness' ? 'bg-purple-600' :
+                          habit.category === 'social' ? 'bg-green-600' :
+                          habit.category === 'growth' ? 'bg-yellow-600' :
+                          'bg-gray-600'
+                        } text-white`}>
+                          {habit.category}
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button className="flex-1 py-2 bg-slate-600 text-white rounded text-sm hover:bg-slate-500">
+                          Track Today
+                        </button>
+                        <div className="px-3 py-2 bg-slate-600 rounded text-sm text-gray-300">
+                          Streak: 0 days
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Progress Insights */}
+              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <h3 className="text-lg font-bold mb-4">📊 Progress Insights</h3>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3 bg-slate-700 rounded">
+                    <span>Weekly Goal Progress</span>
+                    <span className="text-amber-400 font-bold">
+                      {history.slice(0, 7).filter(d => d.done && d.done.length > 0).length}/7 days
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-slate-700 rounded">
+                    <span>Consistency Rating</span>
+                    <span className={`font-bold ${
+                      streaks.current >= 7 ? 'text-green-400' :
+                      streaks.current >= 3 ? 'text-yellow-400' :
+                      'text-red-400'
+                    }`}>
+                      {streaks.current >= 7 ? 'Excellent' : streaks.current >= 3 ? 'Good' : 'Needs Focus'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-slate-700 rounded">
+                    <span>Next Milestone</span>
+                    <span className="text-blue-400">
+                      {streaks.longest + 1} day streak
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      if (view === 'books') {
+        // Curated book database for self-improvement and entrepreneurship
+        const bookDatabase = {
+          productivity: [
+            {
+              title: "Deep Work",
+              author: "Cal Newport",
+              keyInsights: [
+                "Deep work is the ability to focus without distraction on cognitively demanding tasks",
+                "Schedule deep work sessions and protect them fiercely",
+                "Minimize shallow work that doesn't create value",
+                "Train your concentration through deliberate practice"
+              ],
+              whyRead: "Master the skill of focused, distraction-free work in our hyper-connected world"
+            },
+            {
+              title: "Atomic Habits",
+              author: "James Clear",
+              keyInsights: [
+                "Small habits compound into remarkable results over time",
+                "Focus on systems rather than goals for sustainable change",
+                "Make habits attractive, easy, and satisfying",
+                "Track your habits and never miss twice in a row"
+              ],
+              whyRead: "Learn the science of habit formation and transformation"
+            },
+            {
+              title: "Getting Things Done",
+              author: "David Allen",
+              keyInsights: [
+                "Capture everything that requires attention into a trusted system",
+                "Clarify what each item means and what action is required",
+                "Organize reminders and information in the right categories",
+                "Reflect regularly and keep your system current"
+              ],
+              whyRead: "Build a productivity system that eliminates overwhelm and maximizes focus"
+            }
+          ],
+          mindset: [
+            {
+              title: "Mindset",
+              author: "Carol Dweck",
+              keyInsights: [
+                "Growth mindset believes abilities can be developed through dedication",
+                "Fixed mindset avoids challenges and gives up easily",
+                "Embrace challenges as opportunities to grow",
+                "Learn from criticism and find lessons in setbacks"
+              ],
+              whyRead: "Discover how your mindset shapes your success and happiness"
+            },
+            {
+              title: "The Power of Now",
+              author: "Eckhart Tolle",
+              keyInsights: [
+                "The present moment is all we ever have",
+                "Your mind creates suffering through attachment to past/future",
+                "Accept what is without resistance",
+                "Find peace through presence and awareness"
+              ],
+              whyRead: "Learn to live in the present and find inner peace"
+            }
+          ],
+          leadership: [
+            {
+              title: "The 7 Habits of Highly Effective People",
+              author: "Stephen Covey",
+              keyInsights: [
+                "Be proactive - take responsibility for your life",
+                "Begin with the end in mind - define your mission",
+                "Put first things first - prioritize important over urgent",
+                "Seek win-win solutions in relationships"
+              ],
+              whyRead: "Master the fundamental principles of personal and professional effectiveness"
+            },
+            {
+              title: "Dare to Lead",
+              author: "Brené Brown",
+              keyInsights: [
+                "Vulnerability is the birthplace of innovation and change",
+                "Courage is contagious - model the behavior you seek",
+                "Lean into discomfort and have tough conversations",
+                "Build trust through reliability, accountability, and compassion"
+              ],
+              whyRead: "Learn to lead with courage, compassion, and connection"
+            }
+          ],
+          entrepreneurship: [
+            {
+              title: "The Lean Startup",
+              author: "Eric Ries",
+              keyInsights: [
+                "Build-Measure-Learn feedback loop drives innovation",
+                "Validated learning comes from running experiments",
+                "Pivot when assumptions prove wrong",
+                "Minimum Viable Product tests fundamental business hypotheses"
+              ],
+              whyRead: "Master the methodology for building successful businesses"
+            },
+            {
+              title: "Zero to One",
+              author: "Peter Thiel",
+              keyInsights: [
+                "Create monopoly by doing something others cannot",
+                "Focus on technology and timing for competitive advantage",
+                "Sales and distribution are often more important than product",
+                "Build enduring companies, not just successful ones"
+              ],
+              whyRead: "Learn how to build the future and create lasting value"
+            }
+          ],
+          health: [
+            {
+              title: "Why We Sleep",
+              author: "Matthew Walker",
+              keyInsights: [
+                "Sleep is essential for learning, memory, and emotional regulation",
+                "Most adults need 7-9 hours of quality sleep",
+                "Poor sleep increases risk of disease and early death",
+                "Consistent sleep schedule is more important than sleep duration"
+              ],
+              whyRead: "Understand the transformative power of sleep for health and performance"
+            },
+            {
+              title: "How Not to Die",
+              author: "Michael Greger",
+              keyInsights: [
+                "Plant-based diets prevent and reverse chronic diseases",
+                "Daily dozen: beans, berries, greens, and other protective foods",
+                "Processed meats and added sugars are the biggest dietary risks",
+                "Nutrition can prevent 80% of heart disease and cancers"
+              ],
+              whyRead: "Discover evidence-based nutrition for longevity and disease prevention"
+            }
+          ]
+        };
+
+        // Get today's book recommendation
+        const getTodaysBook = () => {
+          const today = new Date();
+          const categories = Object.keys(bookDatabase);
+          const categoryIndex = today.getDay() % categories.length; // Rotate by day of week
+          const category = categories[categoryIndex];
+          const books = bookDatabase[category];
+          const bookIndex = Math.floor(today.getDate() / 7) % books.length; // Rotate weekly
+          return { ...books[bookIndex], category };
+        };
+
+        const todaysBook = getTodaysBook();
+
+        return (
+          <div className="min-h-screen p-4">
+            <div className="max-w-4xl mx-auto">
+              <h1 className="text-4xl font-bold mb-4 text-center">Vita</h1>
+              <div className="flex gap-1 justify-center mb-6 flex-wrap">
+                <button onClick={() => setView('today')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Today</button>
+                <button onClick={() => setView('progress')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Progress</button>
+                <button onClick={() => setView('workouts')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Workouts</button>
+                <button onClick={() => setView('affirmations')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Affirmations</button>
+                <button onClick={() => setView('coach')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Coach</button>
+                <button onClick={() => setView('books')} className="px-2 py-2 bg-amber-600 text-white rounded text-xs">Books</button>
+              </div>
+
+              {/* Today's Book Recommendation */}
+              <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium mb-2 inline-block ${
+                      todaysBook.category === 'productivity' ? 'bg-blue-600' :
+                      todaysBook.category === 'mindset' ? 'bg-purple-600' :
+                      todaysBook.category === 'leadership' ? 'bg-green-600' :
+                      todaysBook.category === 'entrepreneurship' ? 'bg-yellow-600' :
+                      'bg-red-600'
+                    } text-white`}>
+                      {todaysBook.category.charAt(0).toUpperCase() + todaysBook.category.slice(1)}
+                    </span>
+                    <h2 className="text-2xl font-bold text-white">{todaysBook.title}</h2>
+                    <p className="text-gray-400">by {todaysBook.author}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-gray-500">Today's Pick</p>
+                    <p className="text-xs text-gray-600">{new Date().toLocaleDateString()}</p>
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <h3 className="font-bold text-amber-400 mb-2">Why You Should Read This:</h3>
+                  <p className="text-gray-300 text-sm">{todaysBook.whyRead}</p>
+                </div>
+
+                <div>
+                  <h3 className="font-bold text-amber-400 mb-3">Key Insights:</h3>
+                  <ul className="space-y-2">
+                    {todaysBook.keyInsights.map((insight, index) => (
+                      <li key={index} className="flex items-start text-sm text-gray-300">
+                        <span className="text-amber-400 mr-2 mt-1">•</span>
+                        <span>{insight}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              {/* Book Categories */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                {Object.entries(bookDatabase).map(([category, books]) => (
+                  <div key={category} className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+                    <h3 className="font-bold text-lg mb-3 capitalize text-amber-400">{category}</h3>
+                    <div className="space-y-2">
+                      {books.slice(0, 2).map((book, index) => (
+                        <div key={index} className="text-sm">
+                          <p className="font-medium text-white">{book.title}</p>
+                          <p className="text-gray-400 text-xs">by {book.author}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">{books.length} books available</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Reading Challenge */}
+              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <h3 className="text-lg font-bold mb-3">📚 Reading Challenge</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-blue-400">0</p>
+                    <p className="text-xs text-gray-400">Books Read</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-green-400">0</p>
+                    <p className="text-xs text-gray-400">Pages Read</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-purple-400">0</p>
+                    <p className="text-xs text-gray-400">Key Insights</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-yellow-400">0</p>
+                    <p className="text-xs text-gray-400">Streak (days)</p>
+                  </div>
+                </div>
+                <button className="w-full mt-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors">
+                  Log Reading Progress
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      if (view === 'nutrition') {
+        // Food database with nutritional information
+        const foodDatabase = {
+          proteins: [
+            { name: "Chicken Breast (4oz)", calories: 165, protein: 31, carbs: 0, fat: 3.6 },
+            { name: "Salmon (4oz)", calories: 206, protein: 22, carbs: 0, fat: 12 },
+            { name: "Greek Yogurt (plain, 6oz)", calories: 100, protein: 18, carbs: 6, fat: 0 },
+            { name: "Eggs (2 large)", calories: 143, protein: 13, carbs: 1, fat: 10 },
+            { name: "Tuna (canned, 4oz)", calories: 100, protein: 22, carbs: 0, fat: 1 },
+            { name: "Turkey Breast (4oz)", calories: 135, protein: 30, carbs: 0, fat: 1 },
+            { name: "Cottage Cheese (4oz)", calories: 110, protein: 13, carbs: 3, fat: 5 },
+            { name: "Tofu (4oz)", calories: 94, protein: 10, carbs: 2, fat: 6 }
+          ],
+          carbs: [
+            { name: "Brown Rice (1 cup cooked)", calories: 216, protein: 5, carbs: 44, fat: 2 },
+            { name: "Sweet Potato (medium)", calories: 103, protein: 2, carbs: 24, fat: 0 },
+            { name: "Oatmeal (1 cup cooked)", calories: 147, protein: 5, carbs: 27, fat: 3 },
+            { name: "Quinoa (1 cup cooked)", calories: 222, protein: 8, carbs: 39, fat: 4 },
+            { name: "Whole Wheat Bread (2 slices)", calories: 140, protein: 6, carbs: 24, fat: 2 },
+            { name: "Banana", calories: 105, protein: 1, carbs: 27, fat: 0 },
+            { name: "Apple", calories: 95, protein: 0, carbs: 25, fat: 0 },
+            { name: "Avocado (1/2 medium)", calories: 120, protein: 1, carbs: 6, fat: 11 }
+          ],
+          vegetables: [
+            { name: "Broccoli (1 cup)", calories: 31, protein: 3, carbs: 6, fat: 0 },
+            { name: "Spinach (2 cups)", calories: 14, protein: 2, carbs: 2, fat: 0 },
+            { name: "Mixed Greens Salad (2 cups)", calories: 20, protein: 2, carbs: 4, fat: 0 },
+            { name: "Carrots (1 cup)", calories: 50, protein: 1, carbs: 12, fat: 0 },
+            { name: "Bell Peppers (1 cup)", calories: 24, protein: 1, carbs: 6, fat: 0 },
+            { name: "Zucchini (1 cup)", calories: 20, protein: 1, carbs: 4, fat: 1 },
+            { name: "Tomatoes (1 medium)", calories: 22, protein: 1, carbs: 5, fat: 0 },
+            { name: "Cucumber (1 cup)", calories: 16, protein: 1, carbs: 4, fat: 0 }
+          ],
+          snacks: [
+            { name: "Almonds (1oz)", calories: 164, protein: 6, carbs: 6, fat: 14 },
+            { name: "Greek Yogurt with Berries", calories: 150, protein: 20, carbs: 15, fat: 2 },
+            { name: "Apple with Peanut Butter", calories: 200, protein: 5, carbs: 25, fat: 10 },
+            { name: "Protein Bar", calories: 200, protein: 20, carbs: 20, fat: 5 },
+            { name: "Mixed Nuts (1oz)", calories: 175, protein: 5, carbs: 6, fat: 16 },
+            { name: "Dark Chocolate (1oz)", calories: 170, protein: 2, carbs: 13, fat: 12 },
+            { name: "Trail Mix (1oz)", calories: 140, protein: 4, carbs: 12, fat: 9 },
+            { name: "Jerky (1oz)", calories: 116, protein: 9, carbs: 3, fat: 7 }
+          ]
+        };
+
+        const todayKey = getTodayLocal();
+        const todaysMeals = nutritionData[todayKey] || {
+          breakfast: [], lunch: [], dinner: [], snacks: []
+        };
+
+        // Calculate daily totals
+        const calculateTotals = () => {
+          const allFoods = Object.values(todaysMeals).flat();
+          return allFoods.reduce((totals, food) => ({
+            calories: totals.calories + (food.calories || 0),
+            protein: totals.protein + (food.protein || 0),
+            carbs: totals.carbs + (food.carories || 0),
+            fat: totals.fat + (food.fat || 0)
+          }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
+        };
+
+        const dailyTotals = calculateTotals();
+
+        const addFood = (food) => {
+          const updatedMeals = {
+            ...todaysMeals,
+            [selectedMeal]: [...todaysMeals[selectedMeal], food]
+          };
+          const updatedNutrition = {
+            ...nutritionData,
+            [todayKey]: updatedMeals
+          };
+          setNutritionData(updatedNutrition);
+          localStorage.setItem('vita-nutrition', JSON.stringify(updatedNutrition));
+          setShowAddFood(false);
+        };
+
+        const removeFood = (mealType, index) => {
+          const updatedMeals = {
+            ...todaysMeals,
+            [mealType]: todaysMeals[mealType].filter((_, i) => i !== index)
+          };
+          const updatedNutrition = {
+            ...nutritionData,
+            [todayKey]: updatedMeals
+          };
+          setNutritionData(updatedNutrition);
+          localStorage.setItem('vita-nutrition', JSON.stringify(updatedNutrition));
+        };
+
+        // Load nutrition data on component mount
+        React.useEffect(() => {
+          const saved = localStorage.getItem('vita-nutrition');
+          if (saved) {
+            try {
+              setNutritionData(JSON.parse(saved));
+            } catch (e) {
+              console.error('Error loading nutrition data:', e);
+            }
+          }
+        }, []);
+
+        return (
+          <div className="min-h-screen p-4">
+            <div className="max-w-4xl mx-auto">
+              <h1 className="text-4xl font-bold mb-4 text-center">Vita</h1>
+              <div className="flex gap-1 justify-center mb-6 flex-wrap">
+                <button onClick={() => setView('today')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Today</button>
+                <button onClick={() => setView('progress')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Progress</button>
+                <button onClick={() => setView('workouts')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Workouts</button>
+                <button onClick={() => setView('affirmations')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Affirmations</button>
+                <button onClick={() => setView('coach')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Coach</button>
+                <button onClick={() => setView('books')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Books</button>
+                <button onClick={() => setView('nutrition')} className="px-2 py-2 bg-amber-600 text-white rounded text-xs">Nutrition</button>
+              </div>
+
+              {/* Daily Totals */}
+              <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+                <h2 className="text-xl font-bold mb-4 text-center">Today's Nutrition</h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-orange-400">{dailyTotals.calories}</p>
+                    <p className="text-xs text-gray-400">Calories</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-blue-400">{dailyTotals.protein}g</p>
+                    <p className="text-xs text-gray-400">Protein</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-green-400">{dailyTotals.carbs}g</p>
+                    <p className="text-xs text-gray-400">Carbs</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-purple-400">{dailyTotals.fat}g</p>
+                    <p className="text-xs text-gray-400">Fat</p>
+                  </div>
+                </div>
+                <div className="text-center">
+                  <button
+                    onClick={() => setShowAddFood(true)}
+                    className="px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
+                  >
+                    + Add Food
+                  </button>
+                </div>
+              </div>
+
+              {/* Meal Sections */}
+              <div className="space-y-4 mb-6">
+                {['breakfast', 'lunch', 'dinner', 'snacks'].map(mealType => (
+                  <div key={mealType} className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+                    <div className="flex justify-between items-center mb-3">
+                      <h3 className="font-bold capitalize text-amber-400">{mealType}</h3>
+                      <span className="text-sm text-gray-400">
+                        {todaysMeals[mealType].reduce((sum, food) => sum + (food.calories || 0), 0)} cal
+                      </span>
+                    </div>
+                    {todaysMeals[mealType].length === 0 ? (
+                      <p className="text-gray-500 text-sm italic">No foods logged yet</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {todaysMeals[mealType].map((food, index) => (
+                          <div key={index} className="flex justify-between items-center bg-slate-700 rounded p-2">
+                            <div>
+                              <p className="font-medium text-sm">{food.name}</p>
+                              <p className="text-xs text-gray-400">
+                                {food.calories} cal • P:{food.protein}g • C:{food.carbs}g • F:{food.fat}g
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => removeFood(mealType, index)}
+                              className="text-red-400 hover:text-red-300 text-sm"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Add Food Modal */}
+              {showAddFood && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                  <div className="bg-slate-800 rounded-xl p-6 w-full max-w-md border border-slate-700">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg font-bold">Add Food</h3>
+                      <button
+                        onClick={() => setShowAddFood(false)}
+                        className="text-gray-400 hover:text-white"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium mb-2">Meal Type</label>
+                      <select
+                        value={selectedMeal}
+                        onChange={(e) => setSelectedMeal(e.target.value)}
+                        className="w-full p-2 bg-slate-700 rounded text-white"
+                      >
+                        <option value="breakfast">Breakfast</option>
+                        <option value="lunch">Lunch</option>
+                        <option value="dinner">Dinner</option>
+                        <option value="snacks">Snacks</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-4 max-h-80 overflow-y-auto">
+                      {Object.entries(foodDatabase).map(([category, foods]) => (
+                        <div key={category}>
+                          <h4 className="font-medium capitalize mb-2 text-amber-400">{category}</h4>
+                          <div className="space-y-1">
+                            {foods.map((food, index) => (
+                              <button
+                                key={index}
+                                onClick={() => addFood(food)}
+                                className="w-full text-left p-2 bg-slate-700 rounded hover:bg-slate-600 transition-colors"
+                              >
+                                <div className="flex justify-between">
+                                  <span className="text-sm font-medium">{food.name}</span>
+                                  <span className="text-sm text-amber-400">{food.calories} cal</span>
+                                </div>
+                                <div className="text-xs text-gray-400 mt-1">
+                                  P:{food.protein}g • C:{food.carbs}g • F:{food.fat}g
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Nutrition Goals */}
+              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <h3 className="text-lg font-bold mb-4">🎯 Nutrition Goals</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span>Calories</span>
+                    <span className={dailyTotals.calories > 2000 ? 'text-red-400' : dailyTotals.calories > 1500 ? 'text-yellow-400' : 'text-green-400'}>
+                      {dailyTotals.calories}/2000
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-700 rounded-full h-2">
+                    <div
+                      className="bg-green-500 h-2 rounded-full"
+                      style={{ width: `${Math.min((dailyTotals.calories / 2000) * 100, 100)}%` }}
+                    ></div>
+                  </div>
+
+                  <div className="flex justify-between items-center">
+                    <span>Protein</span>
+                    <span className={dailyTotals.protein > 150 ? 'text-red-400' : dailyTotals.protein > 100 ? 'text-yellow-400' : 'text-green-400'}>
+                      {dailyTotals.protein}g/150g
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-700 rounded-full h-2">
+                    <div
+                      className="bg-blue-500 h-2 rounded-full"
+                      style={{ width: `${Math.min((dailyTotals.protein / 150) * 100, 100)}%` }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
       if (view === 'progress') {
         const rate = history.length > 0 ? Math.round((history.reduce((s, d) => s + d.done.length, 0) / (history.length * 18)) * 100) : 0;
         return (
@@ -640,10 +1540,14 @@
 
             {saveStatus && <p className="text-center text-sm text-green-400 mb-2">{saveStatus}</p>}
 
-            <div className="flex gap-2 justify-center mb-6">
-              <button onClick={() => setView('today')} className="px-6 py-2 bg-amber-600 text-white rounded-lg">Today</button>
-              <button onClick={() => setView('progress')} className="px-6 py-2 bg-slate-700 text-gray-300 rounded-lg">Progress</button>
-              <button onClick={() => setView('workouts')} className="px-6 py-2 bg-slate-700 text-gray-300 rounded-lg">Workouts</button>
+            <div className="flex gap-2 justify-center mb-6 flex-wrap">
+              <button onClick={() => setView('today')} className="px-3 py-2 bg-amber-600 text-white rounded-lg text-xs">Today</button>
+              <button onClick={() => setView('progress')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Progress</button>
+              <button onClick={() => setView('workouts')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Workouts</button>
+              <button onClick={() => setView('affirmations')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Affirmations</button>
+              <button onClick={() => setView('coach')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Coach</button>
+              <button onClick={() => setView('books')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Books</button>
+              <button onClick={() => setView('nutrition')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Nutrition</button>
             </div>
 
             <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
