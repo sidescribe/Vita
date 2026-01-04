@@ -1112,7 +1112,7 @@
         // State management (already declared at component level)
 
         const todayKey = getTodayLocal();
-        const todaysMeals = nutritionData[todayKey] || {
+        const todaysMeals = (nutritionData && nutritionData[todayKey]) ? nutritionData[todayKey] : {
           breakfast: [], lunch: [], dinner: [], snacks: []
         };
 
@@ -1167,6 +1167,8 @@
             }
           }
         }, []);
+
+        console.log('About to return nutrition JSX', todaysMeals, dailyTotals);
 
         return (
           <div className="min-h-screen p-4">
