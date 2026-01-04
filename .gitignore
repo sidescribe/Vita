@@ -1,0 +1,29 @@
+# Windows system files
+Thumbs.db
+desktop.ini
+*.tmp
+*.temp
+
+# Browser cache and temporary files
+.cache/
+*.log
+
+# Node modules (if you add any later)
+node_modules/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Local development files
+.env
+.env.local

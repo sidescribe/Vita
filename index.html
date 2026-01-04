@@ -1,0 +1,747 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Vita — Simple Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+  </style>
+</head>
+<body class="bg-slate-900 text-gray-200">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    function getTodayLocal() {
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function VitaApp() {
+      const [view, setView] = useState('today');
+      const today = getTodayLocal();
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [journal, setJournal] = useState('');
+      const [water, setWater] = useState(0);
+      const [saas, setSaas] = useState('');
+      const [deepWork, setDeepWork] = useState('');
+      const [talks, setTalks] = useState('');
+      const [miles, setMiles] = useState('');
+      const [weights, setWeights] = useState({});
+      const [workout, setWorkout] = useState(null);
+      const [history, setHistory] = useState([]);
+      const [viewingDay, setViewingDay] = useState(null);
+      const [showAllHistory, setShowAllHistory] = useState(false);
+      const [saveStatus, setSaveStatus] = useState('');
+      const [isExisting, setIsExisting] = useState(false);
+
+      const rotation = ['back-biceps', 'legs', 'chest-triceps', 'running'];
+
+      const exercises = {
+        'back-biceps': [
+          ['Deadlifts 4x6', 'Bent Rows 4x8', 'Pull-ups 3x10', 'Barbell Curls 3x12', 'Hammer Curls 3x10'],
+          ['T-Bar Rows 4x8', 'Lat Pulldowns 4x10', 'Cable Rows 3x12', 'Preacher Curls 3x12', 'Concentration Curls 3x10']
+        ],
+        'legs': [
+          ['Squats 4x8', 'Romanian Deadlifts 4x10', 'Leg Press 3x12', 'Lunges 3x10', 'Calf Raises 4x15'],
+          ['Front Squats 4x8', 'Bulgarian Splits 3x10', 'Leg Curls 4x12', 'Leg Extensions 3x12', 'Seated Calf 4x15']
+        ],
+        'chest-triceps': [
+          ['Bench Press 4x8', 'Incline DB Press 4x10', 'Dips 3x12', 'Tricep Pushdowns 3x12', 'Overhead Ext 3x10'],
+          ['Incline Bench 4x8', 'Flat DB Press 4x10', 'Cable Flyes 3x12', 'Close Grip Bench 3x10', 'Skull Crushers 3x12']
+        ]
+      };
+
+      const tasks = {
+        core: [
+          { id: 'cold', t: 'Cold shower/exposure' },
+          { id: 'workout', t: 'Lifted/Ran (workout completed)' },
+          { id: 'sun', t: 'Morning sunlight 10+ min' },
+          { id: 'sleep', t: '7-8hr sleep scheduled' },
+          { id: 'priorities', t: 'Wrote down 3 priorities for today' },
+          { id: 'deep', t: '2-3hr deep work (phone locked away)' },
+          { id: 'progress', t: 'Moved the product forward (tangible progress)' },
+          { id: 'read', t: 'Read for 30 minutes' },
+          { id: 'connect', t: 'Had real conversation with someone important (non-work)' }
+        ],
+        lead: [
+          { id: 'no', t: 'Said no to distraction' },
+          { id: 'talk', t: 'Had hard conversation' },
+          { id: 'own', t: 'Owned mistake no excuses' },
+          { id: 'help', t: 'Helped someone' },
+          { id: 'hard', t: 'Did hardest thing first' }
+        ],
+        comm: [
+          { id: 'rec', t: 'Recorded 60s pitch' },
+          { id: 'pause', t: 'Paused before responding' },
+          { id: 'short', t: 'Rewrote 50% shorter' },
+          { id: 'clear', t: 'Explained product clearly' }
+        ]
+      };
+
+      const labels = { 'back-biceps': 'Back & Biceps', 'legs': 'Legs', 'chest-triceps': 'Chest & Triceps', 'running': 'Running' };
+
+      function makeStorage() {
+        if (window.storage && window.storage.get && window.storage.set && window.storage.list) {
+          return window.storage;
+        }
+        return {
+          get: async (key) => {
+            const val = localStorage.getItem(key);
+            return val ? { value: val } : null;
+          },
+          set: async (key, value) => {
+            localStorage.setItem(key, value);
+            return { key, value };
+          },
+          list: async (prefix) => {
+            const keys = Object.keys(localStorage).filter(k => k.startsWith(prefix));
+            return { keys };
+          }
+        };
+      }
+
+      useEffect(() => { loadData(); }, []);
+
+      async function loadData() {
+        setLoading(true);
+        const storage = makeStorage();
+        const initialData = { date: today, done: [], journal: '', water: 0, saas: '', deepWork: '', talks: '', miles: '', weights: {}, mood: null, workoutDone: false };
+        try {
+          // Load today's data
+          try {
+            const td = await storage.get(`day:${today}`);
+            if (td && td.value) {
+              const raw = (typeof td.value === 'string') ? td.value : '';
+              const d = JSON.parse(raw || '{}');
+              const merged = { ...initialData, ...d };
+              const cleanData = JSON.parse(JSON.stringify(merged));
+              setData(cleanData);
+              setJournal(cleanData.journal || '');
+              setWater(cleanData.water || 0);
+              setSaas(cleanData.saas || '');
+              setDeepWork(cleanData.deepWork || '');
+              setTalks(cleanData.talks || '');
+              setMiles(cleanData.miles || '');
+              setWeights(cleanData.weights || {});
+              setIsExisting(true);
+            } else {
+              setData(JSON.parse(JSON.stringify(initialData)));
+              setJournal('');
+              setWater(0);
+              setSaas('');
+              setDeepWork('');
+              setTalks('');
+              setMiles('');
+              setWeights({});
+              setIsExisting(false);
+            }
+          } catch (e) {
+            console.error('Error loading today\'s data:', e);
+            setData(JSON.parse(JSON.stringify(initialData)));
+            setJournal('');
+            setWater(0);
+            setSaas('');
+            setDeepWork('');
+            setTalks('');
+            setMiles('');
+            setWeights({});
+            setIsExisting(false);
+          }
+
+          // Load workout rotation
+          try {
+            const wr = await storage.get('workout-rotation');
+            if (wr && wr.value) {
+              const workoutData = JSON.parse(wr.value);
+              setWorkout(workoutData);
+            } else {
+              setWorkout({ type: 'back-biceps', var: 0 });
+            }
+          } catch (e) {
+            console.error('Error loading workout rotation:', e);
+            setWorkout({ type: 'back-biceps', var: 0 });
+          }
+
+          // Load history
+          await refreshHistory();
+        } catch (e) {
+          console.error('Critical error in loadData:', e);
+          setData(JSON.parse(JSON.stringify(initialData)));
+          setWorkout({ type: 'back-biceps', var: 0 });
+          setHistory([]);
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      async function refreshHistory() {
+        const storage = makeStorage();
+        try {
+          const res = await storage.list('day:');
+          if (res?.keys) {
+            const hist = await Promise.all(res.keys.map(async k => {
+              try {
+                const r = await storage.get(k);
+                if (!r || !r.value) return null;
+                const raw = (typeof r.value === 'string') ? r.value : '';
+                const parsed = JSON.parse(raw || '{}');
+                // Ensure we have all fields for proper display
+                return {
+                  date: parsed.date || k.replace('day:', ''),
+                  done: parsed.done || [],
+                  journal: parsed.journal || '',
+                  water: parsed.water || 0,
+                  saas: parsed.saas || '',
+                  deepWork: parsed.deepWork || '',
+                  talks: parsed.talks || '',
+                  miles: parsed.miles || '',
+                  weights: parsed.weights || {},
+                  workoutDone: parsed.workoutDone || false,
+                  workoutType: parsed.workoutType || null,
+                  mood: parsed.mood || null
+                };
+              } catch (e) {
+                console.error('Error loading history item:', k, e);
+                return null;
+              }
+            }));
+            const validHistory = hist.filter(Boolean);
+            setHistory(validHistory.sort((a, b) => new Date(b.date) - new Date(a.date)));
+          } else {
+            setHistory([]);
+          }
+        } catch (e) {
+          console.error('Error refreshing history:', e);
+          setHistory([]);
+        }
+      }
+
+      async function save(d) {
+        try {
+          setSaveStatus('Saving…');
+          const storage = makeStorage();
+          // Ensure we have a clean copy of the data
+          const cleanData = JSON.parse(JSON.stringify(d));
+          await storage.set(`day:${today}`, JSON.stringify(cleanData));
+          setSaveStatus('Saved ✓');
+          setTimeout(() => setSaveStatus(''), 2000);
+          await refreshHistory();
+          setIsExisting(true);
+        } catch (e) {
+          console.error('Save error', e);
+          setSaveStatus('Save failed ❌');
+          setTimeout(() => setSaveStatus(''), 3000);
+        }
+      }
+
+      async function startNewDay() {
+        if (!window.confirm('Start a new day? This will snapshot and save the current entry, then reset Today to a fresh entry.')) return;
+        const storage = makeStorage();
+        try {
+          if (data && data.date) {
+            await storage.set(`day:${data.date}`, JSON.stringify(data));
+          }
+          const newData = { date: today, done: [], journal: '', water: 0, saas: '', deepWork: '', talks: '', miles: '', weights: {}, mood: null, workoutDone: false };
+          setData(JSON.parse(JSON.stringify(newData)));
+          setJournal(''); setWater(0); setSaas(''); setDeepWork(''); setTalks(''); setMiles(''); setWeights({});
+          await storage.set(`day:${today}`, JSON.stringify(newData));
+          await refreshHistory();
+          setIsExisting(false);
+          setSaveStatus('New day started');
+          setTimeout(() => setSaveStatus(''), 2000);
+        } catch (e) {
+          console.error('New day error', e);
+        }
+      }
+
+      async function completeWorkout() {
+        const storage = makeStorage();
+
+        // Validate that weights are entered for non-running workouts
+        if (workout.type !== 'running') {
+          const exercises = exercises[workout.type][workout.var];
+          const missingWeights = exercises.filter(ex => !weights[ex]);
+          if (missingWeights.length > 0) {
+            alert(`Please enter weights for: ${missingWeights.join(', ')}`);
+            return;
+          }
+        }
+
+        const nd = {
+          ...data,
+          workoutType: workout.type,
+          workoutDone: true,
+          miles: (workout.type === 'running' ? miles : undefined),
+          weights: (workout.type !== 'running' ? { ...weights } : undefined),
+          workoutExercises: (workout.type !== 'running' ? exercises[workout.type][workout.var] : undefined),
+          workoutDate: new Date().toISOString()
+        };
+        const cleanData = JSON.parse(JSON.stringify(nd));
+        setData(cleanData);
+        await save(cleanData);
+
+        // Show success message
+        setSaveStatus('Workout completed! 💪');
+        setTimeout(() => setSaveStatus(''), 2000);
+
+        // Update workout rotation
+        const idx = rotation.indexOf(workout.type);
+        const nextWorkout = { type: rotation[(idx + 1) % rotation.length], var: 0 };
+        setWorkout(nextWorkout);
+        setWeights({});
+        setMiles('');
+
+        // Save the workout rotation
+        try {
+          await storage.set('workout-rotation', JSON.stringify(nextWorkout));
+        } catch (e) {
+          console.error('Failed to save workout rotation', e);
+        }
+      }
+
+      async function toggle(id) {
+        if (!data) return;
+        const done = data.done.includes(id) ? data.done.filter(x => x !== id) : [...data.done, id];
+        const nd = { ...data, done };
+        const cleanData = JSON.parse(JSON.stringify(nd));
+        setData(cleanData);
+        await save(cleanData);
+      }
+
+      async function updateWater(n) {
+        const nw = Math.max(0, (water || 0) + n);
+        setWater(nw);
+        const nd = { ...data, water: nw };
+        const cleanData = JSON.parse(JSON.stringify(nd));
+        setData(cleanData);
+        await save(cleanData);
+      }
+
+      function genNew() {
+        if (!workout || workout.type === 'running') return;
+        const vars = exercises[workout.type] || [];
+        setWorkout({ ...workout, var: (workout.var + 1) % Math.max(1, vars.length) });
+      }
+
+      if (loading || !data || !workout) {
+        return (
+          <div className="flex items-center justify-center h-screen">
+            <div className="text-xl text-gray-300">Loading…</div>
+          </div>
+        );
+      }
+
+      if (view === 'workouts') {
+        const ex = workout.type === 'running' ? null : exercises[workout.type][workout.var];
+        return (
+          <div className="min-h-screen p-4">
+            <div className="max-w-4xl mx-auto">
+              <h1 className="text-4xl font-bold mb-4 text-center">Vita</h1>
+              <div className="flex gap-2 justify-center mb-6">
+                <button onClick={() => setView('today')} className="px-6 py-2 bg-slate-700 rounded-lg">Today</button>
+                <button onClick={() => setView('progress')} className="px-6 py-2 bg-slate-700 rounded-lg">Progress</button>
+                <button onClick={() => setView('workouts')} className="px-6 py-2 bg-amber-600 text-white rounded-lg">Workouts</button>
+              </div>
+              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mb-6">
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <h2 className="text-2xl font-bold">Today: {labels[workout.type]}</h2>
+                    <p className="text-sm text-gray-400">Next: {labels[rotation[(rotation.indexOf(workout.type) + 1) % 4]]}</p>
+                  </div>
+                  {workout.type !== 'running' && <button onClick={genNew} className="px-4 py-2 bg-slate-700 rounded">New Exercises</button>}
+                </div>
+                {workout.type === 'running' ? (
+                  <div className="space-y-4">
+                    <input type="number" step="0.1" value={miles} onChange={(e) => setMiles(e.target.value)} placeholder="Miles run" className="w-full p-3 bg-slate-700 rounded text-white" />
+                    <button onClick={completeWorkout} disabled={!miles || data.workoutDone} className="w-full py-3 bg-green-600 rounded font-semibold disabled:bg-slate-600">{data.workoutDone ? '✓ Done' : 'Complete'}</button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {ex.map((e, i) => (
+                      <div key={i} className={`bg-slate-700 rounded-lg p-4 ${data.workoutDone ? 'opacity-75' : ''}`}>
+                        <div className="font-medium mb-2 flex items-center justify-between">
+                          <span>{e}</span>
+                          {data.workoutDone && weights[e] && <span className="text-green-400 text-sm">✓ Saved</span>}
+                        </div>
+                        <input
+                          type="number"
+                          placeholder="Weight (lbs)"
+                          value={weights[e] || ''}
+                          onChange={(ev) => setWeights({...weights, [e]: ev.target.value})}
+                          className={`w-full p-2 bg-slate-600 rounded text-sm text-white ${data.workoutDone ? 'cursor-not-allowed' : ''}`}
+                          disabled={data.workoutDone}
+                        />
+                        {data.workoutDone && weights[e] && (
+                          <p className="text-xs text-gray-400 mt-1">Previous: {weights[e]} lbs</p>
+                        )}
+                      </div>
+                    ))}
+                    <button onClick={completeWorkout} disabled={data.workoutDone} className="w-full py-3 bg-green-600 rounded font-semibold disabled:bg-slate-600">
+                      {data.workoutDone ? '✓ Workout Completed' : 'Complete Workout'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      if (view === 'progress') {
+        const rate = history.length > 0 ? Math.round((history.reduce((s, d) => s + d.done.length, 0) / (history.length * 18)) * 100) : 0;
+        return (
+          <div className="min-h-screen p-4">
+            <div className="max-w-4xl mx-auto">
+              <h1 className="text-4xl font-bold mb-4 text-center">Vita</h1>
+              <div className="flex gap-2 justify-center mb-6">
+                <button onClick={() => setView('today')} className="px-6 py-2 bg-slate-700 rounded-lg">Today</button>
+                <button onClick={() => setView('progress')} className="px-6 py-2 bg-amber-600 text-white rounded-lg">Progress</button>
+                <button onClick={() => setView('workouts')} className="px-6 py-2 bg-slate-700 rounded-lg">Workouts</button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                  <p className="text-sm mb-2">Completion</p>
+                  <p className="text-4xl font-bold">{rate}%</p>
+                  <p className="text-xs text-gray-400">avg across all days</p>
+                </div>
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                  <p className="text-sm mb-2">Days</p>
+                  <p className="text-4xl font-bold">{history.length}</p>
+                  <p className="text-xs text-gray-400">total tracked</p>
+                </div>
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                  <p className="text-sm mb-2">Workouts</p>
+                  <p className="text-4xl font-bold">{history.filter(d => d.workoutDone).length}</p>
+                  <p className="text-xs text-gray-400">completed</p>
+                </div>
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                  <p className="text-sm mb-2">This Week</p>
+                  <p className="text-4xl font-bold">{history.slice(0, 7).filter(d => d.done.length > 0).length}</p>
+                  <p className="text-xs text-gray-400">active days</p>
+                </div>
+              </div>
+
+              {history.length > 7 && (
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mb-6">
+                  <h2 className="text-xl font-bold mb-4">Monthly Trends</h2>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {(() => {
+                      const months = {};
+                      history.forEach(day => {
+                        const date = new Date(day.date);
+                        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                        if (!months[monthKey]) months[monthKey] = { days: 0, tasks: 0, workouts: 0 };
+                        months[monthKey].days++;
+                        months[monthKey].tasks += day.done.length;
+                        if (day.workoutDone) months[monthKey].workouts++;
+                      });
+
+                      return Object.entries(months)
+                        .sort(([a], [b]) => b.localeCompare(a))
+                        .slice(0, 6)
+                        .map(([month, stats]) => ({
+                          month: new Date(month + '-01').toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+                          avgTasks: Math.round((stats.tasks / stats.days) || 0),
+                          workoutRate: Math.round((stats.workouts / stats.days) * 100) || 0
+                        }))
+                        .map(stat => (
+                          <div key={stat.month} className="flex justify-between items-center bg-slate-700 rounded p-2">
+                            <span className="font-medium">{stat.month}</span>
+                            <div className="flex gap-4 text-sm">
+                              <span>Tasks: <span className="text-amber-400">{stat.avgTasks}/18</span></span>
+                              <span>Workouts: <span className="text-green-400">{stat.workoutRate}%</span></span>
+                            </div>
+                          </div>
+                        ));
+                    })()}
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mb-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold">
+                    {showAllHistory ? `All History (${history.length} days)` : 'Last 7 Days'}
+                  </h2>
+                  {history.length > 7 && (
+                    <button
+                      onClick={() => setShowAllHistory(!showAllHistory)}
+                      className="px-4 py-2 bg-slate-700 rounded-lg text-sm hover:bg-slate-600 transition-colors"
+                    >
+                      {showAllHistory ? 'Show Recent' : `Show All (${history.length})`}
+                    </button>
+                  )}
+                </div>
+                {(showAllHistory ? history : history.slice(0, 7)).map(d => {
+                  const pct = Math.round((d.done.length / 18) * 100);
+                  const daysAgo = Math.floor((new Date() - new Date(d.date)) / (1000 * 60 * 60 * 24));
+                  const isToday = daysAgo === 0;
+                  const isYesterday = daysAgo === 1;
+
+                  return (
+                    <div key={d.date} className="bg-slate-700 rounded-lg p-4 mb-3 cursor-pointer hover:bg-slate-600 transition-colors" onClick={() => setViewingDay(d)}>
+                      <div className="flex justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">
+                            {isToday ? 'Today' :
+                             isYesterday ? 'Yesterday' :
+                             new Date(d.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                          </span>
+                          {daysAgo > 1 && <span className="text-xs text-gray-500">({daysAgo} days ago)</span>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {d.workoutDone && <span className="text-green-400 text-sm">💪</span>}
+                          <span className="text-amber-400 font-bold">{pct}%</span>
+                        </div>
+                      </div>
+                      <div className="w-full bg-slate-600 rounded-full h-2 mb-2">
+                        <div className="bg-amber-500 h-2 rounded-full" style={{ width: `${pct}%` }} />
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        {d.done.length}/18 tasks • {d.workoutDone ? `Workout: ${d.workoutType || 'Completed'}` : 'No workout'}
+                        {d.journal && <span className="ml-2">📝</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+                {history.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    <p className="text-lg mb-2">No history yet</p>
+                    <p className="text-sm">Complete some tasks and they'll appear here!</p>
+                  </div>
+                )}
+              </div>
+
+              {viewingDay && (
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-bold">
+                      {new Date(viewingDay.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                    </h2>
+                    <button onClick={() => setViewingDay(null)} className="px-3 py-1 bg-slate-700 rounded text-sm hover:bg-slate-600">✕</button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 mb-6">
+                    <div className="bg-slate-700 rounded-lg p-4">
+                      <p className="text-sm text-gray-400 mb-1">Tasks Completed</p>
+                      <p className="text-2xl font-bold text-amber-400">{viewingDay.done.length}/18</p>
+                      <p className="text-sm text-gray-300">{Math.round((viewingDay.done.length / 18) * 100)}% complete</p>
+                    </div>
+                    <div className="bg-slate-700 rounded-lg p-4">
+                      <p className="text-sm text-gray-400 mb-1">Workout</p>
+                      <p className="text-lg font-bold text-green-400">
+                        {viewingDay.workoutDone ? (viewingDay.workoutType ? labels[viewingDay.workoutType] || viewingDay.workoutType : 'Completed') : 'Not completed'}
+                      </p>
+                      {viewingDay.miles && <p className="text-sm text-gray-300">{viewingDay.miles} miles run</p>}
+
+                      {viewingDay.workoutDone && viewingDay.weights && Object.keys(viewingDay.weights).length > 0 && (
+                        <div className="mt-3">
+                          <p className="text-xs text-gray-400 mb-2">Exercises Completed:</p>
+                          <div className="space-y-1">
+                            {Object.entries(viewingDay.weights).map(([exercise, weight]) => (
+                              <div key={exercise} className="flex justify-between text-sm">
+                                <span className="text-gray-300">{exercise}:</span>
+                                <span className="text-amber-400 font-medium">{weight} lbs</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mb-6">
+                    <h3 className="font-bold mb-3">Completed Tasks</h3>
+                    <div className="space-y-2">
+                      {tasks.core.map(t => (
+                        <div key={t.id} className={`p-2 rounded text-sm ${viewingDay.done.includes(t.id) ? 'bg-green-900 border border-green-600' : 'bg-slate-700 opacity-50'}`}>
+                          <span>{viewingDay.done.includes(t.id) ? '✅' : '⬜'}</span> {t.t}
+                        </div>
+                      ))}
+                      {tasks.lead.map(t => (
+                        <div key={t.id} className={`p-2 rounded text-sm ${viewingDay.done.includes(t.id) ? 'bg-amber-900 border border-amber-600' : 'bg-slate-700 opacity-50'}`}>
+                          <span>{viewingDay.done.includes(t.id) ? '✅' : '⬜'}</span> {t.t}
+                        </div>
+                      ))}
+                      {tasks.comm.map(t => (
+                        <div key={t.id} className={`p-2 rounded text-sm ${viewingDay.done.includes(t.id) ? 'bg-purple-900 border border-purple-600' : 'bg-slate-700 opacity-50'}`}>
+                          <span>{viewingDay.done.includes(t.id) ? '✅' : '⬜'}</span> {t.t}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {viewingDay.journal && (
+                    <div className="mb-4">
+                      <h3 className="font-bold mb-2">Reflection</h3>
+                      <div className="bg-slate-700 rounded p-3 text-sm text-gray-300">
+                        {viewingDay.journal}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    {viewingDay.mood && (
+                      <div className="bg-slate-700 rounded p-3">
+                        <p className="text-xs text-gray-400 mb-1">Mood</p>
+                        <p className="text-lg">{viewingDay.mood}</p>
+                      </div>
+                    )}
+                    {viewingDay.water && (
+                      <div className="bg-slate-700 rounded p-3">
+                        <p className="text-xs text-gray-400 mb-1">Water</p>
+                        <p className="text-lg">{viewingDay.water} glasses</p>
+                      </div>
+                    )}
+                    {viewingDay.deepWork && (
+                      <div className="bg-slate-700 rounded p-3">
+                        <p className="text-xs text-gray-400 mb-1">Deep Work</p>
+                        <p className="text-lg">{viewingDay.deepWork} hrs</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      const total = 18;
+      const done = data.done ? data.done.length : 0;
+
+      return (
+        <div className="min-h-screen p-4">
+          <div className="max-w-4xl mx-auto">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex-1">
+                <h1 className="text-4xl font-bold mb-1">Vita</h1>
+                <p className="text-sm text-gray-400">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`px-3 py-1 rounded-full text-sm ${isExisting ? 'bg-green-700 text-white' : 'bg-slate-700 text-gray-200'}`}>
+                  {isExisting ? 'Existing' : 'Fresh'}
+                </div>
+                <button onClick={startNewDay} className="px-3 py-2 bg-slate-700 rounded text-sm">New Day</button>
+              </div>
+            </div>
+
+            {saveStatus && <p className="text-center text-sm text-green-400 mb-2">{saveStatus}</p>}
+
+            <div className="flex gap-2 justify-center mb-6">
+              <button onClick={() => setView('today')} className="px-6 py-2 bg-amber-600 text-white rounded-lg">Today</button>
+              <button onClick={() => setView('progress')} className="px-6 py-2 bg-slate-700 text-gray-300 rounded-lg">Progress</button>
+              <button onClick={() => setView('workouts')} className="px-6 py-2 bg-slate-700 text-gray-300 rounded-lg">Workouts</button>
+            </div>
+
+            <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+              <div className="flex justify-between mb-3">
+                <span>Progress</span>
+                <span className="text-2xl font-bold text-amber-400">{done}/{total}</span>
+              </div>
+              <div className="w-full bg-slate-700 rounded-full h-3">
+                <div className="bg-amber-500 h-3 rounded-full" style={{ width: `${(done/total)*100}%` }} />
+              </div>
+            </div>
+
+            <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+              <h3 className="mb-3">Mood</h3>
+              <div className="flex gap-2 flex-wrap">
+                {['😊 Sharp', '🙂 Good', '😐 Okay', '😔 Off', '😰 Hard'].map(m => (
+                  <button key={m} onClick={async () => { const nd = { ...data, mood: m }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} className={`px-4 py-2 rounded-lg ${data.mood === m ? 'bg-amber-500 text-white' : 'bg-slate-700 text-gray-300'}`}>
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+              <div className="flex justify-between items-center mb-3">
+                <div className="flex items-center gap-2">💧<span className="ml-1">Water Intake</span></div>
+                <span className="text-xl font-bold text-blue-400">{water} glasses</span>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => updateWater(-1)} className="px-6 py-2 bg-slate-700 text-white rounded-lg font-bold">-</button>
+                <button onClick={() => updateWater(1)} className="flex-1 py-2 bg-blue-600 text-white rounded-lg font-bold">+ Glass</button>
+              </div>
+              <p className="text-xs text-gray-400 mt-2">Target: 8 glasses per day (64oz)</p>
+            </div>
+
+            <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+              <div className="flex items-center gap-2 mb-3">💻<span>SaaS Work</span></div>
+              <textarea value={saas} onChange={e => setSaas(e.target.value)} onBlur={async () => { const nd = { ...data, saas }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} placeholder="What did you work on today?" className="w-full p-3 bg-slate-700 rounded text-white mb-3" rows="3" />
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <input type="number" step="0.5" value={deepWork} onChange={e => setDeepWork(e.target.value)} onBlur={async () => { const nd = { ...data, deepWork }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} placeholder="Deep work (hrs)" className="p-3 bg-slate-700 rounded text-white" />
+                <input type="number" value={talks} onChange={e => setTalks(e.target.value)} onBlur={async () => { const nd = { ...data, talks }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} placeholder="User talks" className="p-3 bg-slate-700 rounded text-white" />
+              </div>
+              <button onClick={async () => { const nd = { ...data, saas, deepWork, talks }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); setSaveStatus('SaaS work saved! ✓'); setTimeout(() => setSaveStatus(''), 2000); }} className="w-full py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors">
+                Save SaaS Work
+              </button>
+            </div>
+
+            <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+              <h3 className="mb-3">Non-Negotiables</h3>
+              {tasks.core.map(t => (
+                <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-green-900 border-2 border-green-500' : 'bg-slate-700'}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">{t.t}</span>
+                    {data.done.includes(t.id) && <span>✅</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+              <h3 className="mb-3">Leadership (Do 1+)</h3>
+              {tasks.lead.map(t => (
+                <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-amber-900 border-2 border-amber-500' : 'bg-slate-700'}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">{t.t}</span>
+                    {data.done.includes(t.id) && <span>✅</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+              <h3 className="mb-3">Communication</h3>
+              {tasks.comm.map(t => (
+                <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-purple-900 border-2 border-purple-500' : 'bg-slate-700'}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">{t.t}</span>
+                    {data.done.includes(t.id) && <span>✅</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+              <div className="flex items-center gap-2 mb-3">📚<span>Reflection</span></div>
+              <textarea value={journal} onChange={e => setJournal(e.target.value)} onBlur={async () => { const nd = { ...data, journal }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} placeholder="What did I lead? What did I ship? How did I grow?" className="w-full p-3 bg-slate-700 rounded text-white mb-3" rows="4" />
+              <button onClick={async () => { const nd = { ...data, journal }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); setSaveStatus('Reflection saved! ✓'); setTimeout(() => setSaveStatus(''), 2000); }} className="w-full py-2 bg-amber-600 text-white rounded-lg font-semibold hover:bg-amber-700 transition-colors">
+                Save Reflection
+              </button>
+            </div>
+
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<VitaApp />, document.getElementById('root'));
+  </script>
+
+</body>
+</html>
