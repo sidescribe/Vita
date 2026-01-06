@@ -1077,47 +1077,129 @@
       if (view === 'nutrition') {
         console.log('Nutrition view loaded');
 
-        // Complete food database
+        // Expanded food database with 80+ foods
         const foodDatabase = {
           proteins: [
             { name: "Chicken Breast (4oz)", calories: 165, protein: 31, carbs: 0, fat: 3.6 },
+            { name: "Chicken Thigh (4oz)", calories: 203, protein: 25, carbs: 0, fat: 11 },
             { name: "Salmon (4oz)", calories: 206, protein: 22, carbs: 0, fat: 12 },
+            { name: "Tilapia (4oz)", calories: 128, protein: 26, carbs: 0, fat: 3 },
+            { name: "Shrimp (4oz)", calories: 120, protein: 24, carbs: 1, fat: 2 },
             { name: "Greek Yogurt (plain, 6oz)", calories: 100, protein: 18, carbs: 6, fat: 0 },
+            { name: "Greek Yogurt (vanilla, 6oz)", calories: 120, protein: 18, carbs: 12, fat: 1 },
             { name: "Eggs (2 large)", calories: 143, protein: 13, carbs: 1, fat: 10 },
+            { name: "Egg Whites (4 large)", calories: 68, protein: 14, carbs: 1, fat: 0 },
             { name: "Tuna (canned, 4oz)", calories: 100, protein: 22, carbs: 0, fat: 1 },
             { name: "Turkey Breast (4oz)", calories: 135, protein: 30, carbs: 0, fat: 1 },
+            { name: "Turkey Ground (4oz)", calories: 170, protein: 22, carbs: 0, fat: 8 },
+            { name: "Beef (lean, 4oz)", calories: 170, protein: 26, carbs: 0, fat: 7 },
+            { name: "Beef (ground, 4oz)", calories: 217, protein: 20, carbs: 0, fat: 15 },
             { name: "Cottage Cheese (4oz)", calories: 110, protein: 13, carbs: 3, fat: 5 },
-            { name: "Tofu (4oz)", calories: 94, protein: 10, carbs: 2, fat: 6 }
+            { name: "Tofu (4oz)", calories: 94, protein: 10, carbs: 2, fat: 6 },
+            { name: "Tempeh (4oz)", calories: 193, protein: 19, carbs: 9, fat: 11 },
+            { name: "Lentils (1 cup cooked)", calories: 230, protein: 18, carbs: 40, fat: 1 },
+            { name: "Black Beans (1 cup cooked)", calories: 227, protein: 15, carbs: 41, fat: 1 },
+            { name: "Chickpeas (1 cup cooked)", calories: 269, protein: 15, carbs: 45, fat: 4 }
           ],
           carbs: [
             { name: "Brown Rice (1 cup cooked)", calories: 216, protein: 5, carbs: 44, fat: 2 },
-            { name: "Sweet Potato (medium)", calories: 103, protein: 2, carbs: 24, fat: 0 },
-            { name: "Oatmeal (1 cup cooked)", calories: 147, protein: 5, carbs: 27, fat: 3 },
+            { name: "White Rice (1 cup cooked)", calories: 205, protein: 4, carbs: 44, fat: 0 },
             { name: "Quinoa (1 cup cooked)", calories: 222, protein: 8, carbs: 39, fat: 4 },
+            { name: "Oatmeal (1 cup cooked)", calories: 147, protein: 5, carbs: 27, fat: 3 },
+            { name: "Whole Wheat Pasta (1 cup cooked)", calories: 174, protein: 7, carbs: 37, fat: 1 },
+            { name: "Sweet Potato (medium)", calories: 103, protein: 2, carbs: 24, fat: 0 },
+            { name: "White Potato (medium)", calories: 161, protein: 4, carbs: 37, fat: 0 },
             { name: "Whole Wheat Bread (2 slices)", calories: 140, protein: 6, carbs: 24, fat: 2 },
+            { name: "White Bread (2 slices)", calories: 133, protein: 4, carbs: 26, fat: 1 },
+            { name: "Bagel (medium)", calories: 289, protein: 11, carbs: 56, fat: 2 },
             { name: "Banana", calories: 105, protein: 1, carbs: 27, fat: 0 },
             { name: "Apple", calories: 95, protein: 0, carbs: 25, fat: 0 },
-            { name: "Avocado (1/2 medium)", calories: 120, protein: 1, carbs: 6, fat: 11 }
+            { name: "Orange", calories: 62, protein: 1, carbs: 15, fat: 0 },
+            { name: "Strawberries (1 cup)", calories: 49, protein: 1, carbs: 12, fat: 0 },
+            { name: "Blueberries (1 cup)", calories: 84, protein: 1, carbs: 21, fat: 0 },
+            { name: "Grapes (1 cup)", calories: 104, protein: 1, carbs: 27, fat: 0 },
+            { name: "Pineapple (1 cup)", calories: 82, protein: 1, carbs: 22, fat: 0 },
+            { name: "Avocado (1/2 medium)", calories: 120, protein: 1, carbs: 6, fat: 11 },
+            { name: "Corn (1 cup)", calories: 132, protein: 5, carbs: 29, fat: 2 },
+            { name: "Peas (1 cup cooked)", calories: 134, protein: 9, carbs: 25, fat: 1 }
           ],
           vegetables: [
             { name: "Broccoli (1 cup)", calories: 31, protein: 3, carbs: 6, fat: 0 },
             { name: "Spinach (2 cups)", calories: 14, protein: 2, carbs: 2, fat: 0 },
+            { name: "Kale (2 cups)", calories: 66, protein: 5, carbs: 11, fat: 1 },
             { name: "Mixed Greens Salad (2 cups)", calories: 20, protein: 2, carbs: 4, fat: 0 },
+            { name: "Romaine Lettuce (2 cups)", calories: 16, protein: 1, carbs: 3, fat: 0 },
             { name: "Carrots (1 cup)", calories: 50, protein: 1, carbs: 12, fat: 0 },
             { name: "Bell Peppers (1 cup)", calories: 24, protein: 1, carbs: 6, fat: 0 },
             { name: "Zucchini (1 cup)", calories: 20, protein: 1, carbs: 4, fat: 1 },
             { name: "Tomatoes (1 medium)", calories: 22, protein: 1, carbs: 5, fat: 0 },
-            { name: "Cucumber (1 cup)", calories: 16, protein: 1, carbs: 4, fat: 0 }
+            { name: "Cherry Tomatoes (1 cup)", calories: 27, protein: 1, carbs: 6, fat: 0 },
+            { name: "Cucumber (1 cup)", calories: 16, protein: 1, carbs: 4, fat: 0 },
+            { name: "Cauliflower (1 cup)", calories: 25, protein: 2, carbs: 5, fat: 0 },
+            { name: "Brussels Sprouts (1 cup)", calories: 65, protein: 4, carbs: 13, fat: 1 },
+            { name: "Asparagus (1 cup)", calories: 27, protein: 3, carbs: 5, fat: 0 },
+            { name: "Green Beans (1 cup)", calories: 34, protein: 2, carbs: 8, fat: 0 },
+            { name: "Mushrooms (1 cup)", calories: 21, protein: 2, carbs: 3, fat: 0 },
+            { name: "Onion (1 medium)", calories: 44, protein: 1, carbs: 10, fat: 0 },
+            { name: "Garlic (1 clove)", calories: 4, protein: 0, carbs: 1, fat: 0 },
+            { name: "Celery (1 cup)", calories: 16, protein: 1, carbs: 3, fat: 0 },
+            { name: "Beets (1 cup cooked)", calories: 75, protein: 3, carbs: 17, fat: 0 }
           ],
           snacks: [
             { name: "Almonds (1oz)", calories: 164, protein: 6, carbs: 6, fat: 14 },
+            { name: "Walnuts (1oz)", calories: 185, protein: 4, carbs: 4, fat: 18 },
+            { name: "Peanuts (1oz)", calories: 161, protein: 7, carbs: 6, fat: 14 },
+            { name: "Cashews (1oz)", calories: 157, protein: 5, carbs: 9, fat: 12 },
+            { name: "Pistachios (1oz)", calories: 156, protein: 6, carbs: 8, fat: 12 },
             { name: "Greek Yogurt with Berries", calories: 150, protein: 20, carbs: 15, fat: 2 },
             { name: "Apple with Peanut Butter", calories: 200, protein: 5, carbs: 25, fat: 10 },
+            { name: "Banana with Almond Butter", calories: 190, protein: 4, carbs: 27, fat: 8 },
             { name: "Protein Bar", calories: 200, protein: 20, carbs: 20, fat: 5 },
+            { name: "Energy Bar", calories: 250, protein: 10, carbs: 30, fat: 8 },
             { name: "Mixed Nuts (1oz)", calories: 175, protein: 5, carbs: 6, fat: 16 },
-            { name: "Dark Chocolate (1oz)", calories: 170, protein: 2, carbs: 13, fat: 12 },
             { name: "Trail Mix (1oz)", calories: 140, protein: 4, carbs: 12, fat: 9 },
-            { name: "Jerky (1oz)", calories: 116, protein: 9, carbs: 3, fat: 7 }
+            { name: "Dark Chocolate (1oz)", calories: 170, protein: 2, carbs: 13, fat: 12 },
+            { name: "Milk Chocolate (1oz)", calories: 235, protein: 3, carbs: 26, fat: 13 },
+            { name: "Jerky (beef, 1oz)", calories: 116, protein: 9, carbs: 3, fat: 7 },
+            { name: "Turkey Jerky (1oz)", calories: 100, protein: 12, carbs: 4, fat: 3 },
+            { name: "Rice Cakes (2 cakes)", calories: 70, protein: 1, carbs: 15, fat: 0 },
+            { name: "Popcorn (3 cups air-popped)", calories: 93, protein: 3, carbs: 19, fat: 1 },
+            { name: "Pretzels (1oz)", calories: 108, protein: 3, carbs: 22, fat: 1 },
+            { name: "Cheese Crackers (20 pieces)", calories: 151, protein: 3, carbs: 16, fat: 8 }
+          ],
+          fruits: [
+            { name: "Apple", calories: 95, protein: 0, carbs: 25, fat: 0 },
+            { name: "Banana", calories: 105, protein: 1, carbs: 27, fat: 0 },
+            { name: "Orange", calories: 62, protein: 1, carbs: 15, fat: 0 },
+            { name: "Grapes (1 cup)", calories: 104, protein: 1, carbs: 27, fat: 0 },
+            { name: "Strawberries (1 cup)", calories: 49, protein: 1, carbs: 12, fat: 0 },
+            { name: "Blueberries (1 cup)", calories: 84, protein: 1, carbs: 21, fat: 0 },
+            { name: "Raspberries (1 cup)", calories: 64, protein: 1, carbs: 15, fat: 0 },
+            { name: "Blackberries (1 cup)", calories: 62, protein: 2, carbs: 14, fat: 1 },
+            { name: "Pineapple (1 cup)", calories: 82, protein: 1, carbs: 22, fat: 0 },
+            { name: "Mango (1 cup)", calories: 99, protein: 1, carbs: 25, fat: 1 },
+            { name: "Kiwi", calories: 42, protein: 1, carbs: 10, fat: 0 },
+            { name: "Pear", calories: 101, protein: 1, carbs: 27, fat: 0 },
+            { name: "Peach", calories: 59, protein: 1, carbs: 14, fat: 0 },
+            { name: "Plum", calories: 30, protein: 0, carbs: 8, fat: 0 },
+            { name: "Cherries (1 cup)", calories: 87, protein: 1, carbs: 22, fat: 0 },
+            { name: "Watermelon (1 cup)", calories: 46, protein: 1, carbs: 12, fat: 0 },
+            { name: "Cantaloupe (1 cup)", calories: 54, protein: 1, carbs: 13, fat: 0 },
+            { name: "Honeydew (1 cup)", calories: 64, protein: 1, carbs: 16, fat: 0 },
+            { name: "Lemon", calories: 17, protein: 1, carbs: 5, fat: 0 },
+            { name: "Lime", calories: 20, protein: 0, carbs: 7, fat: 0 }
+          ],
+          dairy: [
+            { name: "Milk (2% fat, 8oz)", calories: 122, protein: 8, carbs: 12, fat: 5 },
+            { name: "Milk (whole, 8oz)", calories: 146, protein: 8, carbs: 11, fat: 8 },
+            { name: "Almond Milk (unsweetened, 8oz)", calories: 30, protein: 1, carbs: 2, fat: 3 },
+            { name: "Soy Milk (unsweetened, 8oz)", calories: 80, protein: 7, carbs: 4, fat: 4 },
+            { name: "Oat Milk (unsweetened, 8oz)", calories: 50, protein: 0, carbs: 9, fat: 2 },
+            { name: "Cheddar Cheese (1oz)", calories: 113, protein: 7, carbs: 1, fat: 9 },
+            { name: "Mozzarella Cheese (1oz)", calories: 85, protein: 6, carbs: 1, fat: 6 },
+            { name: "Greek Yogurt (plain, 6oz)", calories: 100, protein: 18, carbs: 6, fat: 0 },
+            { name: "Regular Yogurt (plain, 6oz)", calories: 100, protein: 4, carbs: 7, fat: 5 },
+            { name: "Ice Cream (vanilla, 1/2 cup)", calories: 137, protein: 2, carbs: 16, fat: 7 }
           ]
         };
 
@@ -1280,10 +1362,10 @@
                       </select>
                     </div>
 
-                    <div className="space-y-4">
+                    <div className="space-y-4 max-h-80 overflow-y-auto">
                       {Object.entries(foodDatabase).map(([category, foods]) => (
                         <div key={category}>
-                          <h4 className="font-medium capitalize mb-2 text-amber-400">{category}</h4>
+                          <h4 className="font-medium capitalize mb-2 text-amber-400">{category} ({foods.length})</h4>
                           <div className="space-y-1">
                             {foods.map((food, index) => (
                               <button
