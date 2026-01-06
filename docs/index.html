@@ -49,20 +49,50 @@
       const [saveStatus, setSaveStatus] = useState('');
       const [isExisting, setIsExisting] = useState(false);
 
-      const rotation = ['back-biceps', 'legs', 'chest-triceps', 'running'];
+      const rotation = ['back-biceps', 'legs', 'chest-triceps', 'shoulders', 'full-body', 'core-abs', 'cardio-conditioning', 'running'];
 
       const exercises = {
         'back-biceps': [
           ['Deadlifts 4x6', 'Bent Rows 4x8', 'Pull-ups 3x10', 'Barbell Curls 3x12', 'Hammer Curls 3x10'],
-          ['T-Bar Rows 4x8', 'Lat Pulldowns 4x10', 'Cable Rows 3x12', 'Preacher Curls 3x12', 'Concentration Curls 3x10']
+          ['T-Bar Rows 4x8', 'Lat Pulldowns 4x10', 'Cable Rows 3x12', 'Preacher Curls 3x12', 'Concentration Curls 3x10'],
+          ['Romanian Deadlifts 4x8', 'Seated Rows 4x10', 'Face Pulls 3x12', 'EZ Bar Curls 3x12', 'Cable Curls 3x10'],
+          ['Rack Pulls 4x6', 'Pendlay Rows 4x8', 'Assisted Pull-ups 3x8', 'Dumbbell Curls 3x12', 'Reverse Curls 3x10']
         ],
         'legs': [
           ['Squats 4x8', 'Romanian Deadlifts 4x10', 'Leg Press 3x12', 'Lunges 3x10', 'Calf Raises 4x15'],
-          ['Front Squats 4x8', 'Bulgarian Splits 3x10', 'Leg Curls 4x12', 'Leg Extensions 3x12', 'Seated Calf 4x15']
+          ['Front Squats 4x8', 'Bulgarian Splits 3x10', 'Leg Curls 4x12', 'Leg Extensions 3x12', 'Seated Calf 4x15'],
+          ['Box Squats 4x8', 'Trap Bar Deadlifts 4x8', 'Hack Squat 3x10', 'Walking Lunges 3x12', 'Standing Calf 4x15'],
+          ['Pause Squats 4x6', 'Deficit Deadlifts 4x8', 'Belt Squat 3x12', 'Step-ups 3x10', 'Leg Press Calf 4x20']
         ],
         'chest-triceps': [
           ['Bench Press 4x8', 'Incline DB Press 4x10', 'Dips 3x12', 'Tricep Pushdowns 3x12', 'Overhead Ext 3x10'],
-          ['Incline Bench 4x8', 'Flat DB Press 4x10', 'Cable Flyes 3x12', 'Close Grip Bench 3x10', 'Skull Crushers 3x12']
+          ['Incline Bench 4x8', 'Flat DB Press 4x10', 'Cable Flyes 3x12', 'Close Grip Bench 3x10', 'Skull Crushers 3x12'],
+          ['Floor Press 4x8', 'Incline Flyes 4x10', 'Diamond Push-ups 3x12', 'Rope Pushdowns 3x12', 'Tricep Kickbacks 3x15'],
+          ['Board Press 4x6', 'Hammer Press 4x8', 'Ring Dips 3x10', 'V-Bar Pushdowns 3x12', 'Overhead Rope Ext 3x12']
+        ],
+        'shoulders': [
+          ['Military Press 4x8', 'Lateral Raises 4x12', 'Rear Delt Flyes 4x15', 'Face Pulls 3x12', 'Shrugs 4x10'],
+          ['Arnold Press 4x8', 'Front Raises 4x12', 'Bent-over Raises 4x15', 'Upright Rows 3x10', 'Farmer Walks 3x30s'],
+          ['Push Press 4x6', 'Cable Laterals 4x12', 'Machine Raises 4x15', 'Band Pull-aparts 3x15', 'Dumbbell Shrugs 4x12'],
+          ['Z Press 4x6', 'Single-arm Laterals 4x12', 'Reverse Flyes 4x15', 'Y Raises 3x12', 'Trap Raises 4x10']
+        ],
+        'full-body': [
+          ['Deadlifts 4x6', 'Bench Press 4x8', 'Pull-ups 3x8', 'Squats 4x8', 'Overhead Press 4x8'],
+          ['Romanian DL 4x8', 'Incline Press 4x8', 'Rows 4x10', 'Front Squats 4x8', 'Dips 3x10'],
+          ['Trap Bar DL 4x8', 'Floor Press 4x8', 'Lat Pulldowns 4x10', 'Bulgarian Split 3x10', 'Push-ups 3x15'],
+          ['Deficit DL 4x6', 'Close Grip Bench 4x8', 'Face Pulls 3x12', 'Pause Squats 4x6', 'Diamond Push-ups 3x12']
+        ],
+        'core-abs': [
+          ['Planks 3x45s', 'Russian Twists 4x20', 'Leg Raises 4x15', 'Bicycle Crunches 4x20', 'Mountain Climbers 4x30s'],
+          ['Dead Bugs 4x12', 'Pallof Press 3x12', 'Flutter Kicks 4x30s', 'V-ups 4x15', 'Woodchoppers 3x15'],
+          ['Ab Wheel 4x10', 'Dragon Flags 4x8', 'Hollow Body Hold 3x30s', 'Side Planks 3x30s', 'Reverse Crunches 4x15'],
+          ['Weighted Sit-ups 4x12', 'Cable Crunches 4x15', 'Farmers Carry 3x40s', 'Stir the Pot 3x20s', 'Toes to Bar 4x10']
+        ],
+        'cardio-conditioning': [
+          ['Burpees 4x10', 'Mountain Climbers 4x30s', 'Jump Squats 4x15', 'High Knees 4x30s', 'Box Jumps 4x10'],
+          ['Battle Ropes 4x30s', 'Rowing Sprints 8x30s', 'Kettlebell Swings 4x20', 'Slam Balls 4x15', 'Wall Balls 4x15'],
+          ['Bike Sprints 8x20s', 'Assault Bike 4x30s', 'Ski Erg 4x30s', 'Fan Bike 4x30s', 'Echo Bike 4x30s'],
+          ['Bear Crawls 4x30s', 'Crab Walks 4x30s', 'Broad Jumps 4x10', 'Sprint Intervals 8x20s', 'Hill Sprints 6x30s']
         ]
       };
 
@@ -93,7 +123,16 @@
         ]
       };
 
-      const labels = { 'back-biceps': 'Back & Biceps', 'legs': 'Legs', 'chest-triceps': 'Chest & Triceps', 'running': 'Running' };
+      const labels = {
+        'back-biceps': 'Back & Biceps',
+        'legs': 'Legs',
+        'chest-triceps': 'Chest & Triceps',
+        'shoulders': 'Shoulders',
+        'full-body': 'Full Body',
+        'core-abs': 'Core & Abs',
+        'cardio-conditioning': 'Cardio Conditioning',
+        'running': 'Running'
+      };
 
       function makeStorage() {
         if (window.storage && window.storage.get && window.storage.set && window.storage.list) {
@@ -286,8 +325,8 @@
 
         // Validate that weights are entered for non-running workouts
         if (workout.type !== 'running') {
-          const exercises = exercises[workout.type][workout.var];
-          const missingWeights = exercises.filter(ex => !weights[ex]);
+          const workoutExercises = exercises[workout.type][workout.var];
+          const missingWeights = workoutExercises.filter(ex => !weights[ex]);
           if (missingWeights.length > 0) {
             alert(`Please enter weights for: ${missingWeights.join(', ')}`);
             return;
