@@ -168,6 +168,47 @@
         }
       }, []);
 
+      // Auto-save workout progress when navigating away from workouts tab
+      useEffect(() => {
+        if (view !== 'workouts') {
+          // Save current workout progress to localStorage
+          const workoutProgress = {
+            type: workout.type,
+            var: workout.var,
+            weights: weights,
+            miles: miles,
+            savedAt: new Date().toISOString()
+          };
+          try {
+            localStorage.setItem('vita-workout-progress', JSON.stringify(workoutProgress));
+          } catch (e) {
+            console.error('Error saving workout progress:', e);
+          }
+        }
+      }, [view, workout, weights, miles]);
+
+      // Load saved workout progress when component mounts
+      useEffect(() => {
+        const saved = localStorage.getItem('vita-workout-progress');
+        if (saved) {
+          try {
+            const workoutProgress = JSON.parse(saved);
+            // Only restore if it's recent (within last 24 hours) and not completed today
+            const savedTime = new Date(workoutProgress.savedAt);
+            const now = new Date();
+            const hoursDiff = (now - savedTime) / (1000 * 60 * 60);
+
+            if (hoursDiff < 24 && !data.workoutDone) {
+              setWorkout({ type: workoutProgress.type, var: workoutProgress.var });
+              setWeights(workoutProgress.weights || {});
+              setMiles(workoutProgress.miles || '');
+            }
+          } catch (e) {
+            console.error('Error loading workout progress:', e);
+          }
+        }
+      }, []);
+
       async function loadData() {
         setLoading(true);
         const storage = makeStorage();
@@ -419,7 +460,26 @@
                 {workout.type === 'running' ? (
                   <div className="space-y-4">
                     <input type="number" step="0.1" value={miles} onChange={(e) => setMiles(e.target.value)} placeholder="Miles run" className="w-full p-3 bg-slate-700 rounded text-white" />
-                    <button onClick={completeWorkout} disabled={!miles || data.workoutDone} className="w-full py-3 bg-green-600 rounded font-semibold disabled:bg-slate-600">{data.workoutDone ? '✓ Done' : 'Complete'}</button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={async () => {
+                          const workoutProgress = {
+                            type: workout.type,
+                            var: workout.var,
+                            weights: weights,
+                            miles: miles,
+                            savedAt: new Date().toISOString()
+                          };
+                          localStorage.setItem('vita-workout-progress', JSON.stringify(workoutProgress));
+                          setSaveStatus('Progress saved! 💾');
+                          setTimeout(() => setSaveStatus(''), 2000);
+                        }}
+                        className="flex-1 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700 transition-colors"
+                      >
+                        💾 Save Progress
+                      </button>
+                      <button onClick={completeWorkout} disabled={!miles || data.workoutDone} className="flex-1 py-2 bg-green-600 rounded font-semibold disabled:bg-slate-600">{data.workoutDone ? '✓ Done' : 'Complete'}</button>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -442,9 +502,28 @@
                         )}
                       </div>
                     ))}
-                    <button onClick={completeWorkout} disabled={data.workoutDone} className="w-full py-3 bg-green-600 rounded font-semibold disabled:bg-slate-600">
-                      {data.workoutDone ? '✓ Workout Completed' : 'Complete Workout'}
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={async () => {
+                          const workoutProgress = {
+                            type: workout.type,
+                            var: workout.var,
+                            weights: weights,
+                            miles: miles,
+                            savedAt: new Date().toISOString()
+                          };
+                          localStorage.setItem('vita-workout-progress', JSON.stringify(workoutProgress));
+                          setSaveStatus('Progress saved! 💾');
+                          setTimeout(() => setSaveStatus(''), 2000);
+                        }}
+                        className="flex-1 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700 transition-colors"
+                      >
+                        💾 Save Progress
+                      </button>
+                      <button onClick={completeWorkout} disabled={data.workoutDone} className="flex-1 py-2 bg-green-600 rounded font-semibold disabled:bg-slate-600">
+                        {data.workoutDone ? '✓ Workout Completed' : 'Complete Workout'}
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
