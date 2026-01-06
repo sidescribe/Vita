@@ -181,11 +181,12 @@
           };
           try {
             localStorage.setItem('vita-workout-progress', JSON.stringify(workoutProgress));
+            console.log('Auto-saved workout progress');
           } catch (e) {
             console.error('Error saving workout progress:', e);
           }
         }
-      }, [view, workout, weights, miles]);
+      }, [view]); // Only watch view changes, not the workout data itself
 
       // Load saved workout progress when component mounts
       useEffect(() => {
