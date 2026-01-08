@@ -57,6 +57,12 @@
       const [knowledgeBase, setKnowledgeBase] = useState([]); // Personal notes and insights
       const [spacedRepetition, setSpacedRepetition] = useState([]); // Ideas to remember
       const [currentBookApplication, setCurrentBookApplication] = useState(null); // Today's application prompt
+      const [challenges, setChallenges] = useState([]); // Active challenges
+      const [completedChallenges, setCompletedChallenges] = useState([]); // Completed challenges
+      const [badges, setBadges] = useState([]); // Earned badges
+      const [showCreateChallenge, setShowCreateChallenge] = useState(false);
+      const [aiCoachInsights, setAiCoachInsights] = useState({}); // AI coach analysis and insights
+      const [coachMode, setCoachMode] = useState('daily'); // daily, weekly, monthly
 
       console.log('All state initialized successfully');
 
@@ -205,6 +211,37 @@
             setSpacedRepetition(activeItems);
           } catch (e) {
             console.error('Error loading spaced repetition:', e);
+          }
+        }
+
+        // Load challenges and badges
+        const savedChallenges = localStorage.getItem('vita-challenges');
+        if (savedChallenges) {
+          try {
+            const challengeData = JSON.parse(savedChallenges);
+            setChallenges(challengeData.filter(c => !c.completed));
+            setCompletedChallenges(challengeData.filter(c => c.completed));
+          } catch (e) {
+            console.error('Error loading challenges:', e);
+          }
+        }
+
+        const savedBadges = localStorage.getItem('vita-badges');
+        if (savedBadges) {
+          try {
+            setBadges(JSON.parse(savedBadges));
+          } catch (e) {
+            console.error('Error loading badges:', e);
+          }
+        }
+
+        // Load AI coach insights
+        const savedCoachInsights = localStorage.getItem('vita-ai-coach');
+        if (savedCoachInsights) {
+          try {
+            setAiCoachInsights(JSON.parse(savedCoachInsights));
+          } catch (e) {
+            console.error('Error loading AI coach insights:', e);
           }
         }
 
@@ -608,6 +645,426 @@
 
         setSpacedRepetition(updatedRepetition);
         localStorage.setItem('vita-spaced-repetition', JSON.stringify(updatedRepetition));
+      }
+
+      // Challenge Management Functions
+      function createChallenge(challengeData) {
+        const newChallenge = {
+          id: Date.now(),
+          title: challengeData.title,
+          description: challengeData.description,
+          duration: challengeData.duration,
+          category: challengeData.category,
+          type: challengeData.type, // 'habit', 'avoid', 'track'
+          target: challengeData.target,
+          unit: challengeData.unit,
+          reward: challengeData.reward,
+          createdAt: new Date().toISOString(),
+          startDate: new Date().toISOString(),
+          completed: false,
+          progress: [],
+          currentStreak: 0,
+          bestStreak: 0
+        };
+
+        const updatedChallenges = [...challenges, newChallenge];
+        setChallenges(updatedChallenges);
+        localStorage.setItem('vita-challenges', JSON.stringify([...updatedChallenges, ...completedChallenges]));
+      }
+
+      function updateChallengeProgress(challengeId, completed) {
+        const challenge = challenges.find(c => c.id === challengeId);
+        if (!challenge) return;
+
+        const today = new Date().toISOString().split('T')[0];
+        const existingProgress = challenge.progress.find(p => p.date === today);
+
+        let newProgress;
+        if (existingProgress) {
+          newProgress = challenge.progress.map(p =>
+            p.date === today ? { ...p, completed } : p
+          );
+        } else {
+          newProgress = [...challenge.progress, { date: today, completed }];
+        }
+
+        // Calculate streaks
+        const sortedProgress = newProgress.sort((a, b) => new Date(b.date) - new Date(a.date));
+        let currentStreak = 0;
+        let bestStreak = challenge.bestStreak;
+
+        for (const day of sortedProgress) {
+          if (day.completed) {
+            currentStreak++;
+          } else {
+            break;
+          }
+        }
+
+        bestStreak = Math.max(bestStreak, currentStreak);
+
+        const updatedChallenge = {
+          ...challenge,
+          progress: newProgress,
+          currentStreak,
+          bestStreak
+        };
+
+        // Check if challenge is completed
+        const challengeEndDate = new Date(challenge.startDate);
+        challengeEndDate.setDate(challengeEndDate.getDate() + challenge.duration);
+
+        if (new Date() >= challengeEndDate && currentStreak >= Math.ceil(challenge.duration * 0.8)) {
+          // Challenge completed successfully
+          updatedChallenge.completed = true;
+          updatedChallenge.completedAt = new Date().toISOString();
+
+          // Award badge
+          awardBadge({
+            name: `${challenge.title} Champion`,
+            description: `Completed ${challenge.duration}-day ${challenge.category} challenge`,
+            icon: getBadgeIcon(challenge.category),
+            earnedAt: new Date().toISOString(),
+            challengeId: challenge.id
+          });
+
+          setCompletedChallenges(prev => [...prev, updatedChallenge]);
+          setChallenges(prev => prev.filter(c => c.id !== challengeId));
+        } else {
+          setChallenges(prev => prev.map(c => c.id === challengeId ? updatedChallenge : c));
+        }
+
+        localStorage.setItem('vita-challenges', JSON.stringify([...challenges.filter(c => c.id !== challengeId).map(c => c.id === challengeId ? updatedChallenge : c), ...completedChallenges]));
+      }
+
+      function awardBadge(badge) {
+        const newBadges = [...badges, badge];
+        setBadges(newBadges);
+        localStorage.setItem('vita-badges', JSON.stringify(newBadges));
+      }
+
+      function getBadgeIcon(category) {
+        const icons = {
+          fitness: '💪',
+          discipline: '🎯',
+          nutrition: '🥗',
+          reading: '📚',
+          mindfulness: '🧘',
+          sleep: '😴',
+          productivity: '🚀',
+          social: '🤝'
+        };
+        return icons[category] || '🏆';
+      }
+
+      function getSuggestedChallenges() {
+        return [
+          {
+            title: "7-Day Discipline Challenge",
+            description: "Complete all daily tasks for 7 consecutive days",
+            duration: 7,
+            category: 'discipline',
+            type: 'habit',
+            target: 1,
+            unit: 'days',
+            reward: 'Consistency Badge'
+          },
+          {
+            title: "30-Day Fitness Challenge",
+            description: "Complete a workout every day for 30 days",
+            duration: 30,
+            category: 'fitness',
+            type: 'habit',
+            target: 1,
+            unit: 'workouts',
+            reward: 'Fitness Champion Badge'
+          },
+          {
+            title: "No Sugar for 10 Days",
+            description: "Avoid all added sugars for 10 consecutive days",
+            duration: 10,
+            category: 'nutrition',
+            type: 'avoid',
+            target: 0,
+            unit: 'sugar items',
+            reward: 'Sugar-Free Badge'
+          },
+          {
+            title: "Read 10 Minutes Daily for 14 Days",
+            description: "Read for at least 10 minutes every day",
+            duration: 14,
+            category: 'reading',
+            type: 'habit',
+            target: 10,
+            unit: 'minutes',
+            reward: 'Reading Habit Badge'
+          },
+          {
+            title: "Mindful Morning Routine",
+            description: "Practice 10 minutes of mindfulness or meditation daily",
+            duration: 21,
+            category: 'mindfulness',
+            type: 'habit',
+            target: 10,
+            unit: 'minutes',
+            reward: 'Mindfulness Master Badge'
+          },
+          {
+            title: "Sleep Champion",
+            description: "Get 7+ hours of sleep every night",
+            duration: 14,
+            category: 'sleep',
+            type: 'habit',
+            target: 7,
+            unit: 'hours',
+            reward: 'Sleep Champion Badge'
+          }
+        ];
+      }
+
+      // AI Life Coach Functions
+      function generateAICoachInsights() {
+        if (history.length < 3) {
+          return {
+            dailyFocus: "Keep tracking your activities to receive personalized coaching insights.",
+            weeklyReview: "Not enough data yet for weekly analysis.",
+            monthlyReflection: "Continue building your data for monthly reflections.",
+            personalizedSuggestions: [],
+            patternInsights: [],
+            priorityActions: []
+          };
+        }
+
+        // Analyze daily focus based on current patterns
+        const today = new Date();
+        const dayOfWeek = today.toLocaleDateString('en-US', { weekday: 'long' });
+        const recentWeek = history.slice(-7);
+
+        // Daily focus analysis
+        let dailyFocus = "";
+
+        // Check for concerning patterns
+        const avgTasks = recentWeek.reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / recentWeek.length;
+        const avgMood = recentWeek.filter(d => d.mood).length / recentWeek.length;
+        const workoutStreak = recentWeek.filter(d => d.workoutDone).length;
+
+        if (avgTasks < 10) {
+          dailyFocus = "Focus on building momentum with small, consistent actions. Start with your most important 3 tasks today.";
+        } else if (workoutStreak < 3) {
+          dailyFocus = "Your body thrives on movement. Schedule a workout today - even 20 minutes makes a difference.";
+        } else if (avgMood < 0.7) {
+          dailyFocus = "Prioritize emotional wellbeing today. Consider a walk in nature or connecting with someone meaningful.";
+        } else {
+          dailyFocus = "You're on a strong trajectory! Today, focus on deepening one key habit or relationship.";
+        }
+
+        // Weekly review analysis
+        const weeklyStats = {
+          totalTasks: recentWeek.reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0),
+          workoutsCompleted: recentWeek.filter(d => d.workoutDone).length,
+          avgMoodScore: recentWeek.filter(d => d.mood).map(d => {
+            const scores = { '😊 Sharp': 5, '🙂 Good': 4, '😐 Okay': 3, '😔 Off': 2, '😰 Hard': 1 };
+            return scores[d.mood] || 3;
+          }).reduce((a, b) => a + b, 0) / Math.max(1, recentWeek.filter(d => d.mood).length),
+          readingDays: recentWeek.filter(d => d.done && d.done.some(task => task.includes('read'))).length,
+          socialDays: recentWeek.filter(d => d.done && d.done.some(task => task.includes('connect') || task.includes('social'))).length
+        };
+
+        let weeklyReview = `This week you completed ${weeklyStats.totalTasks} tasks and ${weeklyStats.workoutsCompleted} workouts. `;
+
+        if (weeklyStats.avgMoodScore >= 4) {
+          weeklyReview += "Your emotional wellbeing has been strong. ";
+        } else if (weeklyStats.avgMoodScore >= 3) {
+          weeklyReview += "Your mood has been stable but could use some attention. ";
+        } else {
+          weeklyReview += "Your emotional state needs nurturing. ";
+        }
+
+        if (weeklyStats.readingDays >= 4) {
+          weeklyReview += "Excellent reading consistency! ";
+        } else if (weeklyStats.readingDays >= 2) {
+          weeklyReview += "Good reading habits developing. ";
+        } else {
+          weeklyReview += "Consider building a daily reading ritual. ";
+        }
+
+        weeklyReview += "Next week, focus on sustaining your strongest habits while gently improving areas of opportunity.";
+
+        // Monthly reflection (based on last 30 days)
+        const monthlyData = history.slice(-30);
+        let monthlyReflection = "";
+
+        if (monthlyData.length >= 30) {
+          const monthlyStats = {
+            avgDailyTasks: monthlyData.reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 30,
+            workoutConsistency: monthlyData.filter(d => d.workoutDone).length / 30,
+            moodConsistency: monthlyData.filter(d => d.mood).length / 30,
+            bestStreak: (() => {
+              let currentStreak = 0;
+              let maxStreak = 0;
+              for (const day of monthlyData) {
+                if (day.done && day.done.length > 0) {
+                  currentStreak++;
+                  maxStreak = Math.max(maxStreak, currentStreak);
+                } else {
+                  currentStreak = 0;
+                }
+              }
+              return maxStreak;
+            })()
+          };
+
+          monthlyReflection = `This month, you've shown remarkable ${monthlyStats.workoutConsistency > 0.7 ? 'physical' : monthlyStats.avgDailyTasks > 15 ? 'productive' : 'personal'} consistency. `;
+
+          if (monthlyStats.bestStreak > 10) {
+            monthlyReflection += `Your ${monthlyStats.bestStreak}-day streak demonstrates incredible discipline. `;
+          }
+
+          monthlyReflection += "Reflect on what systems and mindsets made this possible, and consider how to apply these insights to new areas of growth.";
+        } else {
+          monthlyReflection = "Continue building your data foundation. Monthly reflections become most valuable after consistent tracking for several weeks.";
+        }
+
+        // Personalized suggestions based on patterns
+        const personalizedSuggestions = [];
+
+        // Analyze productivity patterns
+        const productivityByDay = {};
+        recentWeek.forEach(day => {
+          const dayName = new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' });
+          productivityByDay[dayName] = (productivityByDay[dayName] || 0) + (day.done ? day.done.length : 0);
+        });
+
+        const mostProductiveDay = Object.entries(productivityByDay).sort(([,a], [,b]) => b - a)[0]?.[0];
+        if (mostProductiveDay) {
+          personalizedSuggestions.push({
+            type: 'productivity',
+            title: 'Optimize Your Schedule',
+            suggestion: `Schedule important work for ${mostProductiveDay}s when you're naturally most productive.`,
+            icon: '📅'
+          });
+        }
+
+        // Energy pattern analysis
+        const energyPatterns = recentWeek.filter(d => d.energyLevel);
+        if (energyPatterns.length >= 3) {
+          const highEnergyDays = energyPatterns.filter(d => d.energyLevel === 'high').length;
+          const lowEnergyDays = energyPatterns.filter(d => d.energyLevel === 'low' || d.energyLevel === 'exhausted').length;
+
+          if (highEnergyDays > lowEnergyDays) {
+            personalizedSuggestions.push({
+              type: 'energy',
+              title: 'Leverage Peak Energy',
+              suggestion: 'Use your high-energy periods for challenging tasks and creative work.',
+              icon: '⚡'
+            });
+          } else {
+            personalizedSuggestions.push({
+              type: 'energy',
+              title: 'Energy Management',
+              suggestion: 'Focus on sleep, nutrition, and recovery to improve baseline energy levels.',
+              icon: '🔋'
+            });
+          }
+        }
+
+        // Social connection analysis
+        const socialPatterns = recentWeek.filter(d => d.done && d.done.some(task =>
+          task.includes('connect') || task.includes('social') || task.includes('friend')
+        ));
+
+        if (socialPatterns.length < 2) {
+          personalizedSuggestions.push({
+            type: 'social',
+            title: 'Build Social Connections',
+            suggestion: 'Schedule regular social interactions - they\'re crucial for emotional wellbeing.',
+            icon: '🤝'
+          });
+        }
+
+        // Reading habit analysis
+        const readingPatterns = recentWeek.filter(d => d.done && d.done.some(task => task.includes('read')));
+
+        if (readingPatterns.length >= 5) {
+          personalizedSuggestions.push({
+            type: 'growth',
+            title: 'Deepen Reading Practice',
+            suggestion: 'Consider joining a book club or starting a reading journal to enhance comprehension.',
+            icon: '📚'
+          });
+        } else if (readingPatterns.length < 2) {
+          personalizedSuggestions.push({
+            type: 'growth',
+            title: 'Cultivate Reading Habit',
+            suggestion: 'Start with 10 minutes daily. Reading compounds knowledge exponentially.',
+            icon: '📖'
+          });
+        }
+
+        // Pattern insights
+        const patternInsights = [];
+
+        // Workout-mood correlation
+        const workoutMoodData = recentWeek.filter(d => d.mood && d.workoutDone !== undefined);
+        if (workoutMoodData.length >= 4) {
+          const workoutDaysMood = workoutMoodData.filter(d => d.workoutDone).map(d => {
+            const scores = { '😊 Sharp': 5, '🙂 Good': 4, '😐 Okay': 3, '😔 Off': 2, '😰 Hard': 1 };
+            return scores[d.mood] || 3;
+          }).reduce((a, b) => a + b, 0) / workoutMoodData.filter(d => d.workoutDone).length;
+
+          const nonWorkoutDaysMood = workoutMoodData.filter(d => !d.workoutDone).map(d => {
+            const scores = { '😊 Sharp': 5, '🙂 Good': 4, '😐 Okay': 3, '😔 Off': 2, '😰 Hard': 1 };
+            return scores[d.mood] || 3;
+          }).reduce((a, b) => a + b, 0) / Math.max(1, workoutMoodData.filter(d => !d.workoutDone).length);
+
+          if (workoutDaysMood > nonWorkoutDaysMood + 0.5) {
+            patternInsights.push({
+              title: 'Movement Boosts Mood',
+              insight: 'Your workouts correlate with improved emotional state. Exercise could be your natural mood enhancer.',
+              impact: 'High'
+            });
+          }
+        }
+
+        // Priority actions based on current state
+        const priorityActions = [];
+
+        // Check for immediate needs
+        const todayData = history[history.length - 1];
+        if (todayData) {
+          if (!todayData.mood) {
+            priorityActions.push({
+              action: 'Set your mood for today',
+              reason: 'Mood tracking helps identify patterns and improve emotional awareness',
+              urgency: 'medium'
+            });
+          }
+
+          if (!todayData.workoutDone && workoutStreak >= 3) {
+            priorityActions.push({
+              action: 'Complete today\'s workout',
+              reason: 'You\'re on a workout streak - don\'t break the momentum!',
+              urgency: 'high'
+            });
+          }
+
+          if ((todayData.done ? todayData.done.length : 0) < 5) {
+            priorityActions.push({
+              action: 'Focus on high-impact tasks',
+              reason: 'Starting your day with key accomplishments builds momentum',
+              urgency: 'medium'
+            });
+          }
+        }
+
+        return {
+          dailyFocus,
+          weeklyReview,
+          monthlyReflection,
+          personalizedSuggestions,
+          patternInsights,
+          priorityActions
+        };
       }
 
       console.log('Checking loading state:', { loading, data, workout });
@@ -1904,6 +2361,9 @@
                 <button onClick={() => setView('nutrition')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Nutrition</button>
                 <button onClick={() => setView('intelligence')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Intelligence</button>
                 <button onClick={() => setView('wellness')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Wellness</button>
+                <button onClick={() => setView('dashboard')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Dashboard</button>
+                <button onClick={() => setView('challenges')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Challenges</button>
+                <button onClick={() => setView('coach-ai')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">AI Coach</button>
               </div>
 
               {/* Daily Totals */}
@@ -2225,6 +2685,8 @@
                 <button onClick={() => setView('nutrition')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Nutrition</button>
                 <button onClick={() => setView('intelligence')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Intelligence</button>
                 <button onClick={() => setView('wellness')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Wellness</button>
+                <button onClick={() => setView('challenges')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Challenges</button>
+                <button onClick={() => setView('coach-ai')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">AI Coach</button>
               </div>
 
               <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
@@ -2604,7 +3066,9 @@
                 <button onClick={() => setView('books')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Books</button>
                 <button onClick={() => setView('nutrition')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Nutrition</button>
                 <button onClick={() => setView('intelligence')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Intelligence</button>
-                <button onClick={() => setView('wellness')} className="px-2 py-2 bg-amber-600 text-white rounded text-xs">Wellness</button>
+                <button onClick={() => setView('wellness')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Wellness</button>
+                <button onClick={() => setView('challenges')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Challenges</button>
+                <button onClick={() => setView('coach-ai')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">AI Coach</button>
               </div>
 
               {/* Current Status */}
@@ -2805,6 +3269,1269 @@
                       </div>
                     </div>
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      if (view === 'dashboard') {
+        // Calculate comprehensive life scores
+        const calculateLifeScores = () => {
+          if (history.length < 3) {
+            return {
+              healthScore: 0,
+              productivityScore: 0,
+              moodScore: 0,
+              consistencyScore: 0,
+              goalProgress: [],
+              insights: [],
+              message: "Need at least 3 days of data for dashboard. Keep tracking!"
+            };
+          }
+
+          // Health Score (0-100) - based on workouts, nutrition, water, energy
+          const healthScore = (() => {
+            let score = 0;
+            const recent = history.slice(-7);
+
+            // Workout consistency (40% weight)
+            const workoutRate = recent.filter(d => d.workoutDone).length / recent.length;
+            score += workoutRate * 40;
+
+            // Nutrition tracking (30% weight)
+            const nutritionRate = recent.filter(d => d.done && d.done.some(task => task.includes('protein') || task.includes('meal'))).length / recent.length;
+            score += nutritionRate * 30;
+
+            // Water intake (15% weight)
+            const avgWater = recent.reduce((sum, d) => sum + (d.water || 0), 0) / recent.length;
+            const waterScore = Math.min(avgWater / 8, 1); // Target 8 glasses
+            score += waterScore * 15;
+
+            // Energy levels (15% weight)
+            const goodEnergyRate = recent.filter(d => d.energyLevel === 'high' || d.energyLevel === 'good').length / recent.length;
+            score += goodEnergyRate * 15;
+
+            return Math.round(Math.min(score, 100));
+          })();
+
+          // Productivity Score (0-100) - based on tasks, deep work, reading
+          const productivityScore = (() => {
+            let score = 0;
+            const recent = history.slice(-7);
+
+            // Task completion rate (50% weight)
+            const avgTasks = recent.reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / recent.length;
+            const taskScore = Math.min(avgTasks / 18, 1); // Target 18 tasks per day
+            score += taskScore * 50;
+
+            // Deep work time (30% weight)
+            const avgDeepWork = recent.reduce((sum, d) => sum + (parseFloat(d.deepWork) || 0), 0) / recent.length;
+            const deepWorkScore = Math.min(avgDeepWork / 4, 1); // Target 4 hours
+            score += deepWorkScore * 30;
+
+            // Reading habit (20% weight)
+            const readingDays = recent.filter(d => d.done && d.done.some(task => task.includes('read'))).length;
+            const readingScore = readingDays / recent.length;
+            score += readingScore * 20;
+
+            return Math.round(Math.min(score, 100));
+          })();
+
+          // Mood Score (0-100) - based on mood tracking and consistency
+          const moodScore = (() => {
+            let score = 0;
+            const recent = history.slice(-7);
+
+            // Positive mood ratio (60% weight)
+            const moodData = recent.filter(d => d.mood);
+            if (moodData.length > 0) {
+              const positiveMoods = moodData.filter(d =>
+                ['😊 Sharp', '🙂 Good'].includes(d.mood)
+              ).length;
+              const moodRatio = positiveMoods / moodData.length;
+              score += moodRatio * 60;
+            }
+
+            // Mood tracking consistency (40% weight)
+            const trackingRate = moodData.length / recent.length;
+            score += trackingRate * 40;
+
+            return Math.round(Math.min(score, 100));
+          })();
+
+          // Consistency Score (0-100) - based on daily tracking habits
+          const consistencyScore = (() => {
+            let score = 0;
+            const recent = history.slice(-7);
+
+            // Daily task completion (25% weight)
+            const daysWithTasks = recent.filter(d => d.done && d.done.length > 0).length;
+            score += (daysWithTasks / recent.length) * 25;
+
+            // Workout consistency (25% weight)
+            const workoutDays = recent.filter(d => d.workoutDone).length;
+            score += (workoutDays / recent.length) * 25;
+
+            // Mood tracking (25% weight)
+            const moodDays = recent.filter(d => d.mood).length;
+            score += (moodDays / recent.length) * 25;
+
+            // Journal entries (25% weight)
+            const journalDays = recent.filter(d => d.journal && d.journal.trim()).length;
+            score += (journalDays / recent.length) * 25;
+
+            return Math.round(Math.min(score, 100));
+          })();
+
+          // Goal Progress - based on various metrics
+          const goalProgress = [
+            {
+              name: "Weekly Workouts",
+              current: history.slice(-7).filter(d => d.workoutDone).length,
+              target: 5,
+              unit: "workouts",
+              color: "blue"
+            },
+            {
+              name: "Daily Water Intake",
+              current: Math.round(history.slice(-7).reduce((sum, d) => sum + (d.water || 0), 0) / 7),
+              target: 8,
+              unit: "glasses",
+              color: "cyan"
+            },
+            {
+              name: "Task Completion",
+              current: Math.round(history.slice(-7).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 7),
+              target: 15,
+              unit: "tasks/day",
+              color: "green"
+            },
+            {
+              name: "Deep Work Hours",
+              current: Math.round(history.slice(-7).reduce((sum, d) => sum + (parseFloat(d.deepWork) || 0), 0) / 7 * 10) / 10,
+              target: 3,
+              unit: "hours/day",
+              color: "purple"
+            }
+          ];
+
+          // Generate insights based on scores
+          const insights = [];
+          if (healthScore < 50) insights.push({ type: 'warning', message: 'Health score needs attention - focus on workouts and nutrition', icon: '⚠️' });
+          if (productivityScore < 50) insights.push({ type: 'warning', message: 'Productivity could improve - try the 2-minute rule for starting tasks', icon: '⚠️' });
+          if (moodScore < 50) insights.push({ type: 'warning', message: 'Mood tracking shows room for improvement - consider gratitude practices', icon: '⚠️' });
+          if (consistencyScore < 50) insights.push({ type: 'warning', message: 'Consistency is key to success - establish daily rituals', icon: '⚠️' });
+
+          if (healthScore > 80) insights.push({ type: 'success', message: 'Excellent health habits! Keep up the great work.', icon: '🎉' });
+          if (productivityScore > 80) insights.push({ type: 'success', message: 'Outstanding productivity! You\'re crushing your goals.', icon: '🚀' });
+          if (moodScore > 80) insights.push({ type: 'success', message: 'Fantastic emotional wellbeing! Maintain these positive habits.', icon: '😊' });
+          if (consistencyScore > 80) insights.push({ type: 'success', message: 'Remarkable consistency! This is what creates lasting change.', icon: '💪' });
+
+          return {
+            healthScore,
+            productivityScore,
+            moodScore,
+            consistencyScore,
+            goalProgress,
+            insights,
+            message: insights.length > 0 ? `Dashboard updated with ${insights.length} insights!` : "Your life metrics are being tracked."
+          };
+        };
+
+        const { healthScore, productivityScore, moodScore, consistencyScore, goalProgress, insights, message } = calculateLifeScores();
+
+        // Overall life score (weighted average)
+        const overallScore = Math.round((healthScore * 0.3) + (productivityScore * 0.3) + (moodScore * 0.2) + (consistencyScore * 0.2));
+
+        return (
+          <div className="min-h-screen p-4">
+            <div className="max-w-6xl mx-auto">
+              <h1 className="text-4xl font-bold mb-4 text-center">Vita</h1>
+              <div className="flex gap-1 justify-center mb-6 flex-wrap">
+                <button onClick={() => setView('today')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Today</button>
+                <button onClick={() => setView('progress')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Progress</button>
+                <button onClick={() => setView('workouts')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Workouts</button>
+                <button onClick={() => setView('affirmations')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Affirmations</button>
+                <button onClick={() => setView('coach')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Coach</button>
+                <button onClick={() => setView('books')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Books</button>
+                <button onClick={() => setView('nutrition')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Nutrition</button>
+                <button onClick={() => setView('intelligence')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Intelligence</button>
+                <button onClick={() => setView('wellness')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Wellness</button>
+                <button onClick={() => setView('dashboard')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Dashboard</button>
+                <button onClick={() => setView('challenges')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Challenges</button>
+                <button onClick={() => setView('coach-ai')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">AI Coach</button>
+              </div>
+
+              {/* Overall Life Score */}
+              <div className="bg-gradient-to-br from-amber-900 via-orange-900 to-red-900 rounded-xl p-8 mb-6 border border-amber-700 text-center">
+                <div className="text-6xl font-bold text-white mb-2">{overallScore}</div>
+                <div className="text-xl text-amber-200 mb-4">Overall Life Score</div>
+                <div className="text-sm text-amber-300">
+                  Based on last {history.length} days of tracking
+                </div>
+                <div className="mt-4">
+                  <div className="text-xs text-amber-400">{message}</div>
+                </div>
+              </div>
+
+              {/* Life Score Breakdown */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                {/* Health Score */}
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">💪</span>
+                      <div>
+                        <h3 className="font-bold text-green-400">Health</h3>
+                        <p className="text-xs text-gray-400">Physical wellbeing</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`text-2xl font-bold ${
+                        healthScore >= 80 ? 'text-green-400' :
+                        healthScore >= 60 ? 'text-yellow-400' :
+                        'text-red-400'
+                      }`}>
+                        {healthScore}
+                      </div>
+                      <div className="text-xs text-gray-500">/100</div>
+                    </div>
+                  </div>
+                  <div className="w-full bg-slate-700 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full ${
+                        healthScore >= 80 ? 'bg-green-500' :
+                        healthScore >= 60 ? 'bg-yellow-500' :
+                        'bg-red-500'
+                      }`}
+                      style={{ width: `${healthScore}%` }}
+                    ></div>
+                  </div>
+                  <div className="mt-3 text-xs text-gray-400">
+                    Workouts • Nutrition • Hydration • Energy
+                  </div>
+                </div>
+
+                {/* Productivity Score */}
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">🚀</span>
+                      <div>
+                        <h3 className="font-bold text-blue-400">Productivity</h3>
+                        <p className="text-xs text-gray-400">Task completion</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`text-2xl font-bold ${
+                        productivityScore >= 80 ? 'text-blue-400' :
+                        productivityScore >= 60 ? 'text-yellow-400' :
+                        'text-red-400'
+                      }`}>
+                        {productivityScore}
+                      </div>
+                      <div className="text-xs text-gray-500">/100</div>
+                    </div>
+                  </div>
+                  <div className="w-full bg-slate-700 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full ${
+                        productivityScore >= 80 ? 'bg-blue-500' :
+                        productivityScore >= 60 ? 'bg-yellow-500' :
+                        'bg-red-500'
+                      }`}
+                      style={{ width: `${productivityScore}%` }}
+                    ></div>
+                  </div>
+                  <div className="mt-3 text-xs text-gray-400">
+                    Tasks • Deep Work • Reading • Focus
+                  </div>
+                </div>
+
+                {/* Mood Score */}
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">😊</span>
+                      <div>
+                        <h3 className="font-bold text-purple-400">Mood</h3>
+                        <p className="text-xs text-gray-400">Emotional wellbeing</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`text-2xl font-bold ${
+                        moodScore >= 80 ? 'text-purple-400' :
+                        moodScore >= 60 ? 'text-yellow-400' :
+                        'text-red-400'
+                      }`}>
+                        {moodScore}
+                      </div>
+                      <div className="text-xs text-gray-500">/100</div>
+                    </div>
+                  </div>
+                  <div className="w-full bg-slate-700 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full ${
+                        moodScore >= 80 ? 'bg-purple-500' :
+                        moodScore >= 60 ? 'bg-yellow-500' :
+                        'bg-red-500'
+                      }`}
+                      style={{ width: `${moodScore}%` }}
+                    ></div>
+                  </div>
+                  <div className="mt-3 text-xs text-gray-400">
+                    Positive Days • Tracking • Balance
+                  </div>
+                </div>
+
+                {/* Consistency Score */}
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">🎯</span>
+                      <div>
+                        <h3 className="font-bold text-orange-400">Consistency</h3>
+                        <p className="text-xs text-gray-400">Habit formation</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`text-2xl font-bold ${
+                        consistencyScore >= 80 ? 'text-orange-400' :
+                        consistencyScore >= 60 ? 'text-yellow-400' :
+                        'text-red-400'
+                      }`}>
+                        {consistencyScore}
+                      </div>
+                      <div className="text-xs text-gray-500">/100</div>
+                    </div>
+                  </div>
+                  <div className="w-full bg-slate-700 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full ${
+                        consistencyScore >= 80 ? 'bg-orange-500' :
+                        consistencyScore >= 60 ? 'bg-yellow-500' :
+                        'bg-red-500'
+                      }`}
+                      style={{ width: `${consistencyScore}%` }}
+                    ></div>
+                  </div>
+                  <div className="mt-3 text-xs text-gray-400">
+                    Daily Habits • Tracking • Discipline
+                  </div>
+                </div>
+              </div>
+
+              {/* Goal Progress */}
+              <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+                <h3 className="text-lg font-bold mb-4 text-amber-400">🎯 Goal Progress (7-Day Average)</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {goalProgress.map((goal, index) => (
+                    <div key={index} className="bg-slate-700 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium text-white">{goal.name}</span>
+                        <span className={`text-sm font-bold ${
+                          goal.color === 'blue' ? 'text-blue-400' :
+                          goal.color === 'cyan' ? 'text-cyan-400' :
+                          goal.color === 'green' ? 'text-green-400' :
+                          'text-purple-400'
+                        }`}>
+                          {goal.current}{goal.unit.includes('/') ? '' : ' '}{goal.unit}
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-600 rounded-full h-2 mb-2">
+                        <div
+                          className={`h-2 rounded-full ${
+                            goal.color === 'blue' ? 'bg-blue-500' :
+                            goal.color === 'cyan' ? 'bg-cyan-500' :
+                            goal.color === 'green' ? 'bg-green-500' :
+                            'bg-purple-500'
+                          }`}
+                          style={{ width: `${Math.min((goal.current / goal.target) * 100, 100)}%` }}
+                        ></div>
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        Target: {goal.target} {goal.unit}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Insights & Recommendations */}
+              {insights.length > 0 && (
+                <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+                  <h3 className="text-lg font-bold mb-4 text-amber-400">💡 Life Insights</h3>
+                  <div className="space-y-3">
+                    {insights.map((insight, index) => (
+                      <div key={index} className={`flex items-start gap-4 p-4 rounded-lg ${
+                        insight.type === 'success' ? 'bg-green-900 border border-green-700' :
+                        'bg-yellow-900 border border-yellow-700'
+                      }`}>
+                        <span className="text-2xl">{insight.icon}</span>
+                        <p className={`text-sm ${
+                          insight.type === 'success' ? 'text-green-200' : 'text-yellow-200'
+                        }`}>
+                          {insight.message}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Weekly Trends */}
+              {history.length >= 7 && (
+                <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+                  <h3 className="text-lg font-bold mb-4 text-amber-400">📊 Weekly Trends</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-slate-700 rounded-lg p-4 text-center">
+                      <h4 className="font-medium mb-3 text-green-400">Best Performing Day</h4>
+                      <p className="text-2xl font-bold text-white">
+                        {(() => {
+                          const dayAverages = {};
+                          history.slice(-7).forEach(day => {
+                            const dayName = new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' });
+                            if (!dayAverages[dayName]) dayAverages[dayName] = [];
+                            dayAverages[dayName].push(day.done ? day.done.length : 0);
+                          });
+
+                          const averages = Object.entries(dayAverages).map(([day, tasks]) => ({
+                            day,
+                            avg: tasks.reduce((a, b) => a + b, 0) / tasks.length
+                          }));
+
+                          return averages.sort((a, b) => b.avg - a.avg)[0]?.day || 'N/A';
+                        })()}
+                      </p>
+                      <p className="text-sm text-gray-400">highest productivity</p>
+                    </div>
+
+                    <div className="bg-slate-700 rounded-lg p-4 text-center">
+                      <h4 className="font-medium mb-3 text-blue-400">Current Streak</h4>
+                      <p className="text-2xl font-bold text-white">
+                        {(() => {
+                          let streak = 0;
+                          for (let i = history.length - 1; i >= 0; i--) {
+                            if (history[i].done && history[i].done.length > 0) {
+                              streak++;
+                            } else {
+                              break;
+                            }
+                          }
+                          return streak;
+                        })()} days
+                      </p>
+                      <p className="text-sm text-gray-400">consecutive active days</p>
+                    </div>
+
+                    <div className="bg-slate-700 rounded-lg p-4 text-center">
+                      <h4 className="font-medium mb-3 text-purple-400">Improvement Rate</h4>
+                      <p className="text-2xl font-bold text-white">
+                        {(() => {
+                          if (history.length < 14) return 'N/A';
+                          const recentWeek = history.slice(-7).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 7;
+                          const previousWeek = history.slice(-14, -7).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 7;
+                          const improvement = ((recentWeek - previousWeek) / previousWeek) * 100;
+                          return (improvement > 0 ? '+' : '') + Math.round(improvement) + '%';
+                        })()}
+                      </p>
+                      <p className="text-sm text-gray-400">vs last week</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Items */}
+              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <h3 className="text-lg font-bold mb-4 text-amber-400">🎯 Quick Actions</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <button
+                    onClick={() => setView('today')}
+                    className="p-3 bg-slate-700 rounded-lg hover:bg-slate-600 transition-colors text-left"
+                  >
+                    <div className="text-blue-400 font-medium">📝 Log Today</div>
+                    <div className="text-xs text-gray-400">Add your daily data</div>
+                  </button>
+                  <button
+                    onClick={() => setView('workouts')}
+                    className="p-3 bg-slate-700 rounded-lg hover:bg-slate-600 transition-colors text-left"
+                  >
+                    <div className="text-green-400 font-medium">💪 Workout</div>
+                    <div className="text-xs text-gray-400">Start your session</div>
+                  </button>
+                  <button
+                    onClick={() => setView('nutrition')}
+                    className="p-3 bg-slate-700 rounded-lg hover:bg-slate-600 transition-colors text-left"
+                  >
+                    <div className="text-purple-400 font-medium">🥗 Nutrition</div>
+                    <div className="text-xs text-gray-400">Track your meals</div>
+                  </button>
+                  <button
+                    onClick={() => setView('books')}
+                    className="p-3 bg-slate-700 rounded-lg hover:bg-slate-600 transition-colors text-left"
+                  >
+                    <div className="text-amber-400 font-medium">📚 Learn</div>
+                    <div className="text-xs text-gray-400">Read and apply ideas</div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      if (view === 'challenges') {
+        const suggestedChallenges = getSuggestedChallenges();
+
+        return (
+          <div className="min-h-screen p-4">
+            <div className="max-w-6xl mx-auto">
+              <h1 className="text-4xl font-bold mb-4 text-center">Vita</h1>
+              <div className="flex gap-1 justify-center mb-6 flex-wrap">
+                <button onClick={() => setView('today')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Today</button>
+                <button onClick={() => setView('progress')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Progress</button>
+                <button onClick={() => setView('workouts')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Workouts</button>
+                <button onClick={() => setView('affirmations')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Affirmations</button>
+                <button onClick={() => setView('coach')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Coach</button>
+                <button onClick={() => setView('books')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Books</button>
+                <button onClick={() => setView('nutrition')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Nutrition</button>
+                <button onClick={() => setView('intelligence')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Intelligence</button>
+                <button onClick={() => setView('wellness')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Wellness</button>
+                <button onClick={() => setView('dashboard')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Dashboard</button>
+                <button onClick={() => setView('challenges')} className="px-1 py-2 bg-amber-600 text-white rounded text-xs">Challenges</button>
+              </div>
+
+              {/* Challenge Header */}
+              <div className="bg-gradient-to-r from-purple-900 via-pink-900 to-red-900 rounded-xl p-6 mb-6 border border-purple-700">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-4xl">🎯</span>
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">Challenge Mode</h2>
+                    <p className="text-purple-200">Gamify your growth journey</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-purple-800 rounded-lg p-4 text-center">
+                    <h3 className="font-medium mb-2 text-purple-200">Active Challenges</h3>
+                    <p className="text-3xl font-bold text-white">{challenges.length}</p>
+                  </div>
+                  <div className="bg-pink-800 rounded-lg p-4 text-center">
+                    <h3 className="font-medium mb-2 text-pink-200">Completed</h3>
+                    <p className="text-3xl font-bold text-white">{completedChallenges.length}</p>
+                  </div>
+                  <div className="bg-red-800 rounded-lg p-4 text-center">
+                    <h3 className="font-medium mb-2 text-red-200">Badges Earned</h3>
+                    <p className="text-3xl font-bold text-white">{badges.length}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Active Challenges */}
+              {challenges.length > 0 && (
+                <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+                  <h3 className="text-lg font-bold mb-4 text-amber-400">🎯 Active Challenges</h3>
+                  <div className="space-y-4">
+                    {challenges.map((challenge) => {
+                      const progress = challenge.progress.length;
+                      const completedDays = challenge.progress.filter(p => p.completed).length;
+                      const percentage = challenge.duration > 0 ? Math.round((progress / challenge.duration) * 100) : 0;
+                      const completionRate = progress > 0 ? Math.round((completedDays / progress) * 100) : 0;
+
+                      const today = new Date().toISOString().split('T')[0];
+                      const todayCompleted = challenge.progress.some(p => p.date === today && p.completed);
+
+                      return (
+                        <div key={challenge.id} className="bg-slate-700 rounded-lg p-4">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1">
+                              <h4 className="font-bold text-white text-lg">{challenge.title}</h4>
+                              <p className="text-gray-300 text-sm mb-2">{challenge.description}</p>
+                              <div className="flex items-center gap-4 text-xs text-gray-400">
+                                <span>🔥 Streak: {challenge.currentStreak}</span>
+                                <span>⭐ Best: {challenge.bestStreak}</span>
+                                <span>📅 {progress}/{challenge.duration} days</span>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-2xl font-bold text-amber-400">{completionRate}%</div>
+                              <div className="text-xs text-gray-400">success rate</div>
+                            </div>
+                          </div>
+
+                          {/* Progress Bar */}
+                          <div className="w-full bg-slate-600 rounded-full h-3 mb-3">
+                            <div
+                              className="bg-gradient-to-r from-green-500 to-blue-500 h-3 rounded-full transition-all duration-300"
+                              style={{ width: `${percentage}%` }}
+                            ></div>
+                          </div>
+
+                          {/* Today's Action */}
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm text-gray-300">
+                              {todayCompleted ? (
+                                <span className="text-green-400">✅ Completed today!</span>
+                              ) : (
+                                <span>Ready for today's challenge</span>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => updateChallengeProgress(challenge.id, !todayCompleted)}
+                              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                                todayCompleted
+                                  ? 'bg-green-600 text-white hover:bg-green-700'
+                                  : 'bg-amber-600 text-white hover:bg-amber-700'
+                              }`}
+                            >
+                              {todayCompleted ? '✅ Done' : 'Mark Complete'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Suggested Challenges */}
+              <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-amber-400">💡 Suggested Challenges</h3>
+                  <button
+                    onClick={() => setShowCreateChallenge(true)}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    ➕ Create Custom
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {suggestedChallenges.map((challenge, index) => (
+                    <div key={index} className="bg-slate-700 rounded-lg p-4 border border-slate-600">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <h4 className="font-bold text-white">{challenge.title}</h4>
+                          <p className="text-gray-300 text-sm mb-2">{challenge.description}</p>
+                          <div className="flex items-center gap-3 text-xs text-gray-400">
+                            <span>⏱️ {challenge.duration} days</span>
+                            <span>🏆 {challenge.reward}</span>
+                          </div>
+                        </div>
+                        <span className="text-2xl">{getBadgeIcon(challenge.category)}</span>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          createChallenge(challenge);
+                          setSaveStatus(`🎯 Started "${challenge.title}" challenge!`);
+                          setTimeout(() => setSaveStatus(''), 3000);
+                        }}
+                        className="w-full py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors font-medium"
+                      >
+                        Start Challenge
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Create Custom Challenge Modal */}
+              {showCreateChallenge && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                  <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full mx-4">
+                    <h3 className="text-lg font-bold mb-4 text-amber-400">🎯 Create Custom Challenge</h3>
+                    <div className="space-y-4">
+                      <input
+                        type="text"
+                        placeholder="Challenge title"
+                        className="w-full p-3 bg-slate-700 rounded-lg text-white placeholder-gray-400"
+                      />
+                      <textarea
+                        placeholder="Challenge description"
+                        className="w-full p-3 bg-slate-700 rounded-lg text-white placeholder-gray-400"
+                        rows="3"
+                      />
+                      <div className="grid grid-cols-2 gap-4">
+                        <input
+                          type="number"
+                          placeholder="Duration (days)"
+                          className="w-full p-3 bg-slate-700 rounded-lg text-white placeholder-gray-400"
+                        />
+                        <select className="w-full p-3 bg-slate-700 rounded-lg text-white">
+                          <option value="">Category</option>
+                          <option value="fitness">Fitness</option>
+                          <option value="nutrition">Nutrition</option>
+                          <option value="productivity">Productivity</option>
+                          <option value="mindfulness">Mindfulness</option>
+                          <option value="reading">Reading</option>
+                          <option value="discipline">Discipline</option>
+                        </select>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Reward badge name"
+                        className="w-full p-3 bg-slate-700 rounded-lg text-white placeholder-gray-400"
+                      />
+                    </div>
+                    <div className="flex gap-2 mt-6">
+                      <button
+                        onClick={() => {
+                          // Create custom challenge logic would go here
+                          setShowCreateChallenge(false);
+                          setSaveStatus('🎯 Custom challenge created!');
+                          setTimeout(() => setSaveStatus(''), 3000);
+                        }}
+                        className="flex-1 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700"
+                      >
+                        Create Challenge
+                      </button>
+                      <button
+                        onClick={() => setShowCreateChallenge(false)}
+                        className="flex-1 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-500"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Completed Challenges & Badges */}
+              {(completedChallenges.length > 0 || badges.length > 0) && (
+                <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+                  <h3 className="text-lg font-bold mb-4 text-amber-400">🏆 Achievements</h3>
+
+                  {/* Badges */}
+                  {badges.length > 0 && (
+                    <div className="mb-6">
+                      <h4 className="font-medium mb-3 text-purple-400">Badges Earned</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {badges.map((badge, index) => (
+                          <div key={index} className="bg-gradient-to-br from-purple-600 to-pink-600 rounded-lg p-3 text-center">
+                            <div className="text-2xl mb-1">{badge.icon}</div>
+                            <div className="text-white font-medium text-sm">{badge.name}</div>
+                            <div className="text-purple-200 text-xs">{badge.description}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Completed Challenges */}
+                  {completedChallenges.length > 0 && (
+                    <div>
+                      <h4 className="font-medium mb-3 text-green-400">Completed Challenges</h4>
+                      <div className="space-y-3">
+                        {completedChallenges.map((challenge) => (
+                          <div key={challenge.id} className="bg-slate-700 rounded-lg p-4 border border-green-600">
+                            <div className="flex items-center gap-3">
+                              <span className="text-green-400 text-2xl">🏆</span>
+                              <div className="flex-1">
+                                <h5 className="font-bold text-white">{challenge.title}</h5>
+                                <p className="text-gray-300 text-sm">{challenge.description}</p>
+                                <div className="flex items-center gap-4 mt-2 text-xs text-gray-400">
+                                  <span>📅 {challenge.duration} days completed</span>
+                                  <span>🔥 Best streak: {challenge.bestStreak}</span>
+                                  <span>⭐ Completed: {new Date(challenge.completedAt).toLocaleDateString()}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Challenge Tips */}
+              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <h3 className="text-lg font-bold mb-4 text-amber-400">💡 Challenge Success Tips</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3">
+                      <span className="text-blue-400 mt-1">🎯</span>
+                      <div>
+                        <p className="font-medium text-white">Start Small</p>
+                        <p className="text-sm text-gray-400">Choose challenges that are challenging but achievable</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <span className="text-green-400 mt-1">🔥</span>
+                      <div>
+                        <p className="font-medium text-white">Build Streaks</p>
+                        <p className="text-sm text-gray-400">Focus on consistency over perfection</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <span className="text-purple-400 mt-1">🤝</span>
+                      <div>
+                        <p className="font-medium text-white">Accountability</p>
+                        <p className="text-sm text-gray-400">Share your challenges with friends or online</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3">
+                      <span className="text-yellow-400 mt-1">📊</span>
+                      <div>
+                        <p className="font-medium text-white">Track Progress</p>
+                        <p className="text-sm text-gray-400">Use the dashboard to monitor your improvement</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <span className="text-red-400 mt-1">🎉</span>
+                      <div>
+                        <p className="font-medium text-white">Celebrate Wins</p>
+                        <p className="text-sm text-gray-400">Reward yourself when you complete challenges</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <span className="text-pink-400 mt-1">🔄</span>
+                      <div>
+                        <p className="font-medium text-white">Learn & Adapt</p>
+                        <p className="text-sm text-gray-400">Use insights to improve future challenges</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      if (view === 'coach-ai') {
+        const coachInsights = generateAICoachInsights();
+
+        return (
+          <div className="min-h-screen p-4">
+            <div className="max-w-6xl mx-auto">
+              <h1 className="text-4xl font-bold mb-4 text-center">Vita</h1>
+              <div className="flex gap-1 justify-center mb-6 flex-wrap">
+                <button onClick={() => setView('today')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Today</button>
+                <button onClick={() => setView('progress')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Progress</button>
+                <button onClick={() => setView('workouts')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Workouts</button>
+                <button onClick={() => setView('affirmations')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Affirmations</button>
+                <button onClick={() => setView('coach')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Coach</button>
+                <button onClick={() => setView('books')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Books</button>
+                <button onClick={() => setView('nutrition')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Nutrition</button>
+                <button onClick={() => setView('intelligence')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Intelligence</button>
+                <button onClick={() => setView('wellness')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Wellness</button>
+                <button onClick={() => setView('dashboard')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Dashboard</button>
+                <button onClick={() => setView('challenges')} className="px-1 py-2 bg-slate-700 text-gray-300 rounded text-xs">Challenges</button>
+                <button onClick={() => setView('coach-ai')} className="px-1 py-2 bg-amber-600 text-white rounded text-xs">AI Coach</button>
+              </div>
+
+              {/* AI Coach Header */}
+              <div className="bg-gradient-to-r from-blue-900 via-purple-900 to-indigo-900 rounded-xl p-6 mb-6 border border-blue-700">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-4xl">🧬</span>
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">AI Life Coach</h2>
+                    <p className="text-blue-200">Your intelligent personal development partner</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-blue-800 rounded-lg p-4 text-center">
+                    <h3 className="font-medium mb-2 text-blue-200">Data Points</h3>
+                    <p className="text-3xl font-bold text-white">{history.length}</p>
+                    <p className="text-sm text-blue-300">days analyzed</p>
+                  </div>
+                  <div className="bg-purple-800 rounded-lg p-4 text-center">
+                    <h3 className="font-medium mb-2 text-purple-200">Insights Generated</h3>
+                    <p className="text-3xl font-bold text-white">
+                      {coachInsights.personalizedSuggestions.length + coachInsights.patternInsights.length}
+                    </p>
+                    <p className="text-sm text-purple-300">personalized tips</p>
+                  </div>
+                  <div className="bg-indigo-800 rounded-lg p-4 text-center">
+                    <h3 className="font-medium mb-2 text-indigo-200">Coach Mode</h3>
+                    <p className="text-lg font-bold text-white capitalize">{coachMode}</p>
+                    <p className="text-sm text-indigo-300">current focus</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Coach Mode Selector */}
+              <div className="bg-slate-800 rounded-xl p-4 mb-6 border border-slate-700">
+                <div className="flex gap-2 justify-center">
+                  {[
+                    { key: 'daily', label: 'Daily Check-in', icon: '🌅', desc: 'Today\'s focus & priorities' },
+                    { key: 'weekly', label: 'Weekly Review', icon: '📊', desc: '7-day pattern analysis' },
+                    { key: 'monthly', label: 'Monthly Reflection', icon: '🌙', desc: '30-day growth insights' }
+                  ].map((mode) => (
+                    <button
+                      key={mode.key}
+                      onClick={() => setCoachMode(mode.key)}
+                      className={`flex-1 p-4 rounded-lg border transition-all ${
+                        coachMode === mode.key
+                          ? 'bg-amber-600 border-amber-500 text-white'
+                          : 'bg-slate-700 border-slate-600 text-gray-300 hover:bg-slate-600'
+                      }`}
+                    >
+                      <div className="text-2xl mb-2">{mode.icon}</div>
+                      <div className="font-medium text-sm">{mode.label}</div>
+                      <div className="text-xs opacity-75 mt-1">{mode.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Daily Check-in Mode */}
+              {coachMode === 'daily' && (
+                <div className="space-y-6">
+                  {/* Today's Focus */}
+                  <div className="bg-slate-800 rounded-xl p-6 border border-amber-700">
+                    <div className="flex items-center gap-3 mb-4">
+                      <span className="text-3xl">🎯</span>
+                      <div>
+                        <h3 className="text-lg font-bold text-amber-400">Today's Focus</h3>
+                        <p className="text-sm text-gray-400">Here's what you should prioritize today</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-amber-900 rounded-lg p-4">
+                      <p className="text-white text-lg leading-relaxed">{coachInsights.dailyFocus}</p>
+                    </div>
+
+                    <div className="mt-4 flex gap-2">
+                      <button className="flex-1 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors">
+                        ✅ Applied Today
+                      </button>
+                      <button className="flex-1 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-500">
+                        🤔 Need Clarification
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Priority Actions */}
+                  {coachInsights.priorityActions.length > 0 && (
+                    <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                      <h3 className="text-lg font-bold mb-4 text-red-400">🚨 Priority Actions</h3>
+                      <div className="space-y-3">
+                        {coachInsights.priorityActions.map((action, index) => (
+                          <div key={index} className={`flex items-start gap-4 p-4 rounded-lg ${
+                            action.urgency === 'high' ? 'bg-red-900 border border-red-700' :
+                            'bg-yellow-900 border border-yellow-700'
+                          }`}>
+                            <span className="text-2xl mt-1">
+                              {action.urgency === 'high' ? '🔥' : '⚡'}
+                            </span>
+                            <div className="flex-1">
+                              <p className="text-white font-medium">{action.action}</p>
+                              <p className="text-sm text-gray-300 mt-1">{action.reason}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Personalized Suggestions */}
+                  {coachInsights.personalizedSuggestions.length > 0 && (
+                    <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                      <h3 className="text-lg font-bold mb-4 text-green-400">💡 Personalized Suggestions</h3>
+                      <div className="space-y-3">
+                        {coachInsights.personalizedSuggestions.map((suggestion, index) => (
+                          <div key={index} className="flex items-start gap-4 p-4 bg-slate-700 rounded-lg">
+                            <span className="text-2xl">{suggestion.icon}</span>
+                            <div className="flex-1">
+                              <h4 className="font-medium text-white">{suggestion.title}</h4>
+                              <p className="text-gray-300 text-sm mt-1">{suggestion.suggestion}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Weekly Review Mode */}
+              {coachMode === 'weekly' && (
+                <div className="space-y-6">
+                  {/* Weekly Overview */}
+                  <div className="bg-slate-800 rounded-xl p-6 border border-blue-700">
+                    <div className="flex items-center gap-3 mb-4">
+                      <span className="text-3xl">📊</span>
+                      <div>
+                        <h3 className="text-lg font-bold text-blue-400">Weekly Review</h3>
+                        <p className="text-sm text-gray-400">Your 7-day performance analysis</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-blue-900 rounded-lg p-4">
+                      <p className="text-white leading-relaxed">{coachInsights.weeklyReview}</p>
+                    </div>
+
+                    {/* Weekly Stats Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                      <div className="bg-slate-700 rounded-lg p-3 text-center">
+                        <p className="text-2xl font-bold text-blue-400">
+                          {Math.round(history.slice(-7).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 7 * 10) / 10}
+                        </p>
+                        <p className="text-xs text-gray-400">avg tasks/day</p>
+                      </div>
+                      <div className="bg-slate-700 rounded-lg p-3 text-center">
+                        <p className="text-2xl font-bold text-green-400">
+                          {history.slice(-7).filter(d => d.workoutDone).length}
+                        </p>
+                        <p className="text-xs text-gray-400">workouts</p>
+                      </div>
+                      <div className="bg-slate-700 rounded-lg p-3 text-center">
+                        <p className="text-2xl font-bold text-purple-400">
+                          {Math.round(history.slice(-7).filter(d => d.mood).map(d => {
+                            const scores = { '😊 Sharp': 5, '🙂 Good': 4, '😐 Okay': 3, '😔 Off': 2, '😰 Hard': 1 };
+                            return scores[d.mood] || 3;
+                          }).reduce((a, b) => a + b, 0) / Math.max(1, history.slice(-7).filter(d => d.mood).length) * 10) / 10}
+                        </p>
+                        <p className="text-xs text-gray-400">avg mood</p>
+                      </div>
+                      <div className="bg-slate-700 rounded-lg p-3 text-center">
+                        <p className="text-2xl font-bold text-yellow-400">
+                          {history.slice(-7).filter(d => d.done && d.done.some(task => task.includes('read'))).length}
+                        </p>
+                        <p className="text-xs text-gray-400">reading days</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pattern Insights */}
+                  {coachInsights.patternInsights.length > 0 && (
+                    <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                      <h3 className="text-lg font-bold mb-4 text-purple-400">🔍 Pattern Insights</h3>
+                      <div className="space-y-3">
+                        {coachInsights.patternInsights.map((insight, index) => (
+                          <div key={index} className="flex items-start gap-4 p-4 bg-slate-700 rounded-lg">
+                            <span className="text-2xl">
+                              {insight.impact === 'High' ? '🔥' : insight.impact === 'Medium' ? '⚡' : '💡'}
+                            </span>
+                            <div className="flex-1">
+                              <h4 className="font-medium text-white">{insight.title}</h4>
+                              <p className="text-gray-300 text-sm mt-1">{insight.insight}</p>
+                              <span className={`inline-block mt-2 px-2 py-1 rounded text-xs font-medium ${
+                                insight.impact === 'High' ? 'bg-red-600 text-white' :
+                                insight.impact === 'Medium' ? 'bg-yellow-600 text-white' :
+                                'bg-green-600 text-white'
+                              }`}>
+                                {insight.impact} Impact
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Next Week Planning */}
+                  <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                    <h3 className="text-lg font-bold mb-4 text-green-400">🎯 Next Week Focus</h3>
+                    <div className="space-y-4">
+                      <div className="bg-slate-700 rounded-lg p-4">
+                        <h4 className="font-medium mb-2 text-green-400">Maintain Your Strengths</h4>
+                        <div className="space-y-2 text-sm text-gray-300">
+                          {history.slice(-7).filter(d => d.workoutDone).length >= 4 && (
+                            <div>✅ Keep up the workout momentum</div>
+                          )}
+                          {history.slice(-7).filter(d => d.done && d.done.some(task => task.includes('read'))).length >= 4 && (
+                            <div>✅ Continue your reading streak</div>
+                          )}
+                          {history.slice(-7).filter(d => d.mood).length >= 5 && (
+                            <div>✅ Maintain mood tracking consistency</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-700 rounded-lg p-4">
+                        <h4 className="font-medium mb-2 text-blue-400">Areas for Growth</h4>
+                        <div className="space-y-2 text-sm text-gray-300">
+                          {history.slice(-7).filter(d => d.done && d.done.length > 0).length < 5 && (
+                            <div>🎯 Increase daily task completion</div>
+                          )}
+                          {history.slice(-7).filter(d => d.workoutDone).length < 3 && (
+                            <div>🎯 Build workout consistency</div>
+                          )}
+                          {history.slice(-7).filter(d => d.mood).length < 4 && (
+                            <div>🎯 Track mood more regularly</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Monthly Reflection Mode */}
+              {coachMode === 'monthly' && (
+                <div className="space-y-6">
+                  {/* Monthly Overview */}
+                  <div className="bg-slate-800 rounded-xl p-6 border border-indigo-700">
+                    <div className="flex items-center gap-3 mb-4">
+                      <span className="text-3xl">🌙</span>
+                      <div>
+                        <h3 className="text-lg font-bold text-indigo-400">Monthly Reflection</h3>
+                        <p className="text-sm text-gray-400">Deep insights from your 30-day journey</p>
+                      </div>
+                    </div>
+
+                    {history.length >= 30 ? (
+                      <div className="bg-indigo-900 rounded-lg p-4">
+                        <p className="text-white leading-relaxed">{coachInsights.monthlyReflection}</p>
+                      </div>
+                    ) : (
+                      <div className="bg-slate-700 rounded-lg p-4 text-center">
+                        <p className="text-gray-300">
+                          Monthly reflections unlock after 30 days of consistent tracking.
+                          You're currently at {history.length} days - keep going!
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Monthly Stats */}
+                    {history.length >= 30 && (
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                        <div className="bg-slate-700 rounded-lg p-3 text-center">
+                          <p className="text-2xl font-bold text-indigo-400">
+                            {Math.round(history.slice(-30).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 30 * 10) / 10}
+                          </p>
+                          <p className="text-xs text-gray-400">avg tasks/day</p>
+                        </div>
+                        <div className="bg-slate-700 rounded-lg p-3 text-center">
+                          <p className="text-2xl font-bold text-green-400">
+                            {Math.round((history.slice(-30).filter(d => d.workoutDone).length / 30) * 100)}%
+                          </p>
+                          <p className="text-xs text-gray-400">workout rate</p>
+                        </div>
+                        <div className="bg-slate-700 rounded-lg p-3 text-center">
+                          <p className="text-2xl font-bold text-purple-400">
+                            {(() => {
+                              let currentStreak = 0;
+                              let maxStreak = 0;
+                              for (const day of history.slice(-30)) {
+                                if (day.done && day.done.length > 0) {
+                                  currentStreak++;
+                                  maxStreak = Math.max(maxStreak, currentStreak);
+                                } else {
+                                  currentStreak = 0;
+                                }
+                              }
+                              return maxStreak;
+                            })()}
+                          </p>
+                          <p className="text-xs text-gray-400">best streak</p>
+                        </div>
+                        <div className="bg-slate-700 rounded-lg p-3 text-center">
+                          <p className="text-2xl font-bold text-yellow-400">
+                            {Math.round((history.slice(-30).filter(d => d.mood).length / 30) * 100)}%
+                          </p>
+                          <p className="text-xs text-gray-400">mood tracking</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Growth Areas */}
+                  {history.length >= 30 && (
+                    <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                      <h3 className="text-lg font-bold mb-4 text-amber-400">📈 Growth Opportunities</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-slate-700 rounded-lg p-4">
+                          <h4 className="font-medium mb-3 text-red-400">Needs Attention</h4>
+                          <div className="space-y-2 text-sm text-gray-300">
+                            {history.slice(-30).filter(d => d.workoutDone).length / 30 < 0.5 && (
+                              <div>• Physical activity consistency</div>
+                            )}
+                            {history.slice(-30).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 30 < 10 && (
+                              <div>• Daily productivity volume</div>
+                            )}
+                            {history.slice(-30).filter(d => d.mood).length / 30 < 0.6 && (
+                              <div>• Emotional awareness tracking</div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="bg-slate-700 rounded-lg p-4">
+                          <h4 className="font-medium mb-3 text-green-400">Strengths to Build On</h4>
+                          <div className="space-y-2 text-sm text-gray-300">
+                            {history.slice(-30).filter(d => d.workoutDone).length / 30 >= 0.7 && (
+                              <div>• Excellent physical discipline</div>
+                            )}
+                            {history.slice(-30).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 30 >= 15 && (
+                              <div>• Strong productivity habits</div>
+                            )}
+                            {history.slice(-30).filter(d => d.mood).length / 30 >= 0.8 && (
+                              <div>• Good emotional awareness</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Future Planning */}
+                  <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                    <h3 className="text-lg font-bold mb-4 text-blue-400">🔮 Next Month Goals</h3>
+                    <div className="space-y-4">
+                      <div className="bg-slate-700 rounded-lg p-4">
+                        <h4 className="font-medium mb-2 text-blue-400">Personal Challenge</h4>
+                        <p className="text-gray-300 text-sm">
+                          Based on your patterns, consider committing to one significant challenge next month:
+                        </p>
+                        <div className="mt-3 space-y-2">
+                          {history.slice(-30).filter(d => d.workoutDone).length / 30 < 0.6 && (
+                            <div className="text-sm text-amber-400">• 20-workout fitness challenge</div>
+                          )}
+                          {history.slice(-30).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 30 < 12 && (
+                            <div className="text-sm text-amber-400">• 20-task daily productivity goal</div>
+                          )}
+                          {history.slice(-30).filter(d => d.done && d.done.some(task => task.includes('read'))).length < 15 && (
+                            <div className="text-sm text-amber-400">• Daily reading habit (20+ days)</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-700 rounded-lg p-4">
+                        <h4 className="font-medium mb-2 text-green-400">Systems to Refine</h4>
+                        <p className="text-gray-300 text-sm">
+                          Consider optimizing these systems for even better results:
+                        </p>
+                        <div className="mt-3 space-y-2 text-sm text-gray-300">
+                          <div>• Morning routine optimization</div>
+                          <div>• Evening reflection practice</div>
+                          <div>• Weekly planning sessions</div>
+                          <div>• Accountability partnerships</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Coach Interaction */}
+              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <h3 className="text-lg font-bold mb-4 text-amber-400">💬 Coach Interaction</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <button className="p-4 bg-slate-700 rounded-lg hover:bg-slate-600 transition-colors text-left">
+                    <div className="text-blue-400 font-medium">🎯 Get Specific Advice</div>
+                    <div className="text-sm text-gray-400 mt-1">Ask for detailed guidance on a specific area</div>
+                  </button>
+                  <button className="p-4 bg-slate-700 rounded-lg hover:bg-slate-600 transition-colors text-left">
+                    <div className="text-green-400 font-medium">📊 Request Analysis</div>
+                    <div className="text-sm text-gray-400 mt-1">Deep dive into a particular metric or pattern</div>
+                  </button>
+                  <button className="p-4 bg-slate-700 rounded-lg hover:bg-slate-600 transition-colors text-left">
+                    <div className="text-purple-400 font-medium">🎯 Set New Goal</div>
+                    <div className="text-sm text-gray-400 mt-1">Get help defining and planning a new objective</div>
+                  </button>
+                  <button className="p-4 bg-slate-700 rounded-lg hover:bg-slate-600 transition-colors text-left">
+                    <div className="text-yellow-400 font-medium">🔄 Refresh Insights</div>
+                    <div className="text-sm text-gray-400 mt-1">Generate fresh analysis with latest data</div>
+                  </button>
                 </div>
               </div>
             </div>
