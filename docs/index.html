@@ -31,9 +31,6 @@
       console.log('VitaApp component starting...');
       const [view, setView] = useState('today');
       console.log('View state initialized:', view);
-      console.log('VitaApp component starting...');
-      const [view, setView] = useState('today');
-      console.log('View state initialized:', view);
 
       const today = getTodayLocal();
       console.log('Today date:', today);
@@ -180,7 +177,7 @@
 
       // Auto-save workout progress when navigating away from workouts tab
       useEffect(() => {
-        if (view !== 'workouts') {
+        if (view !== 'workouts' && workout && workout.type) {
           // Save current workout progress to localStorage
           const workoutProgress = {
             type: workout.type,
@@ -196,7 +193,7 @@
             console.error('Error saving workout progress:', e);
           }
         }
-      }, [view]); // Only watch view changes, not the workout data itself
+      }, [view, workout, weights, miles]); // Include all dependencies
 
       // Load saved workout progress when component mounts
       useEffect(() => {
@@ -209,7 +206,7 @@
             const now = new Date();
             const hoursDiff = (now - savedTime) / (1000 * 60 * 60);
 
-            if (hoursDiff < 24 && !data.workoutDone) {
+            if (hoursDiff < 24 && data && !data.workoutDone) {
               setWorkout({ type: workoutProgress.type, var: workoutProgress.var });
               setWeights(workoutProgress.weights || {});
               setMiles(workoutProgress.miles || '');
