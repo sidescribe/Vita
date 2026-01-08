@@ -29,27 +29,8 @@
 
     function VitaApp() {
       console.log('VitaApp component starting...');
-
-      // Simple test - return basic JSX to see if React works
-      return (
-        <div className="min-h-screen p-4 bg-blue-500">
-          <div className="max-w-4xl mx-auto">
-            <h1 className="text-4xl font-bold mb-4 text-center text-white">Vita App Test</h1>
-            <p className="text-white text-center">If you see this, React is working!</p>
-            <button
-              className="px-4 py-2 bg-white text-blue-500 rounded"
-              onClick={() => alert('Button works!')}
-            >
-              Test Button
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    // Original VitaApp function (commented out for testing)
-    /*
-    function VitaApp_ORIGINAL() {
+      const [view, setView] = useState('today');
+      console.log('View state initialized:', view);
       console.log('VitaApp component starting...');
       const [view, setView] = useState('today');
       console.log('View state initialized:', view);
@@ -1949,7 +1930,6 @@
         </div>
       );
     }
-    */
 
     ReactDOM.render(<VitaApp />, document.getElementById('root'));
   </script>
