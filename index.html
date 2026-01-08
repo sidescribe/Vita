@@ -28,8 +28,35 @@
     }
 
     function VitaApp() {
+      console.log('VitaApp component starting...');
+
+      // Simple test - return basic JSX to see if React works
+      return (
+        <div className="min-h-screen p-4 bg-blue-500">
+          <div className="max-w-4xl mx-auto">
+            <h1 className="text-4xl font-bold mb-4 text-center text-white">Vita App Test</h1>
+            <p className="text-white text-center">If you see this, React is working!</p>
+            <button
+              className="px-4 py-2 bg-white text-blue-500 rounded"
+              onClick={() => alert('Button works!')}
+            >
+              Test Button
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Original VitaApp function (commented out for testing)
+    /*
+    function VitaApp_ORIGINAL() {
+      console.log('VitaApp component starting...');
       const [view, setView] = useState('today');
+      console.log('View state initialized:', view);
+
       const today = getTodayLocal();
+      console.log('Today date:', today);
+
       const [data, setData] = useState(null);
       const [loading, setLoading] = useState(true);
       const [journal, setJournal] = useState('');
@@ -48,6 +75,8 @@
       const [selectedMeal, setSelectedMeal] = useState('breakfast');
       const [saveStatus, setSaveStatus] = useState('');
       const [isExisting, setIsExisting] = useState(false);
+
+      console.log('All state initialized successfully');
 
       const rotation = ['back-biceps', 'legs', 'chest-triceps', 'shoulders', 'full-body', 'core-abs', 'cardio-conditioning', 'running'];
 
@@ -431,13 +460,18 @@
         setWorkout({ ...workout, var: (workout.var + 1) % Math.max(1, vars.length) });
       }
 
+      console.log('Checking loading state:', { loading, data, workout });
+
       if (loading || !data || !workout) {
+        console.log('Still loading, showing loading screen');
         return (
           <div className="flex items-center justify-center h-screen">
             <div className="text-xl text-gray-300">Loading…</div>
           </div>
         );
       }
+
+      console.log('Loading complete, rendering main app');
 
       if (view === 'workouts') {
         const ex = workout.type === 'running' ? null : exercises[workout.type][workout.var];
@@ -1915,6 +1949,7 @@
         </div>
       );
     }
+    */
 
     ReactDOM.render(<VitaApp />, document.getElementById('root'));
   </script>
