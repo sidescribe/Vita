@@ -53,6 +53,10 @@
       const [selectedMeal, setSelectedMeal] = useState('breakfast');
       const [saveStatus, setSaveStatus] = useState('');
       const [isExisting, setIsExisting] = useState(false);
+      const [energyLevel, setEnergyLevel] = useState(null);
+      const [knowledgeBase, setKnowledgeBase] = useState([]); // Personal notes and insights
+      const [spacedRepetition, setSpacedRepetition] = useState([]); // Ideas to remember
+      const [currentBookApplication, setCurrentBookApplication] = useState(null); // Today's application prompt
 
       console.log('All state initialized successfully');
 
@@ -175,6 +179,39 @@
         }
       }, []);
 
+      // Load knowledge data on component mount
+      useEffect(() => {
+        // Load knowledge base
+        const savedKnowledge = localStorage.getItem('vita-knowledge-base');
+        if (savedKnowledge) {
+          try {
+            setKnowledgeBase(JSON.parse(savedKnowledge));
+          } catch (e) {
+            console.error('Error loading knowledge base:', e);
+          }
+        }
+
+        // Load spaced repetition items
+        const savedRepetition = localStorage.getItem('vita-spaced-repetition');
+        if (savedRepetition) {
+          try {
+            const repetitionData = JSON.parse(savedRepetition);
+            // Filter out completed items and update due dates
+            const now = new Date();
+            const activeItems = repetitionData.filter(item => {
+              const dueDate = new Date(item.nextReview);
+              return dueDate <= now;
+            });
+            setSpacedRepetition(activeItems);
+          } catch (e) {
+            console.error('Error loading spaced repetition:', e);
+          }
+        }
+
+        // Generate today's book application
+        generateTodaysApplication();
+      }, []);
+
       // Auto-save workout progress when navigating away from workouts tab
       useEffect(() => {
         if (view !== 'workouts' && workout && workout.type) {
@@ -220,7 +257,7 @@
       async function loadData() {
         setLoading(true);
         const storage = makeStorage();
-        const initialData = { date: today, done: [], journal: '', water: 0, saas: '', deepWork: '', talks: '', miles: '', weights: {}, mood: null, workoutDone: false };
+        const initialData = { date: today, done: [], journal: '', water: 0, saas: '', deepWork: '', talks: '', miles: '', weights: {}, mood: null, workoutDone: false, energyLevel: null };
         try {
           // Load today's data
         try {
@@ -313,7 +350,8 @@
                   weights: parsed.weights || {},
                   workoutDone: parsed.workoutDone || false,
                   workoutType: parsed.workoutType || null,
-                  mood: parsed.mood || null
+                  mood: parsed.mood || null,
+                  energyLevel: parsed.energyLevel || null
                 };
               } catch (e) {
                 console.error('Error loading history item:', k, e);
@@ -356,7 +394,7 @@
           if (data && data.date) {
             await storage.set(`day:${data.date}`, JSON.stringify(data));
           }
-          const newData = { date: today, done: [], journal: '', water: 0, saas: '', deepWork: '', talks: '', miles: '', weights: {}, mood: null, workoutDone: false };
+          const newData = { date: today, done: [], journal: '', water: 0, saas: '', deepWork: '', talks: '', miles: '', weights: {}, mood: null, workoutDone: false, energyLevel: null };
           setData(JSON.parse(JSON.stringify(newData)));
           setJournal(''); setWater(0); setSaas(''); setDeepWork(''); setTalks(''); setMiles(''); setWeights({});
           await storage.set(`day:${today}`, JSON.stringify(newData));
@@ -436,6 +474,140 @@
         if (!workout || workout.type === 'running') return;
         const vars = exercises[workout.type] || [];
         setWorkout({ ...workout, var: (workout.var + 1) % Math.max(1, vars.length) });
+      }
+
+      // Knowledge Integration Functions
+      function generateTodaysApplication() {
+        const books = [
+          {
+            title: "Atomic Habits",
+            author: "James Clear",
+            application: "Today, identify one habit you want to build and start with a 2-minute version. For example, if you want to read more, commit to reading just one page after breakfast."
+          },
+          {
+            title: "The Power of Habit",
+            author: "Charles Duhigg",
+            application: "Today, identify your habit loop: pick a cue, routine, and reward for one habit you want to change. Replace the routine while keeping the same cue and reward."
+          },
+          {
+            title: "How to Win Friends",
+            author: "Dale Carnegie",
+            application: "Today, practice the principle of appreciation: find three people to genuinely compliment or thank before noon. Notice how it affects your interactions."
+          },
+          {
+            title: "Thinking, Fast and Slow",
+            author: "Daniel Kahneman",
+            application: "Today, catch yourself in 'fast thinking' mode when making a decision. Pause and consciously switch to 'slow thinking' by asking: What information am I missing?"
+          },
+          {
+            title: "The 7 Habits",
+            author: "Stephen Covey",
+            application: "Today, practice 'begin with the end in mind': Before starting your first task, visualize what success looks like and work backwards from there."
+          },
+          {
+            title: "Deep Work",
+            author: "Cal Newport",
+            application: "Today, schedule your most important deep work session during your peak energy time. Protect this time fiercely - no email, no notifications."
+          },
+          {
+            title: "The Life-Changing Magic",
+            author: "Marie Kondo",
+            application: "Today, apply the 'spark joy' test to your digital life: delete 10 apps, unsubscribe from 5 newsletters, and organize one digital folder that sparks confusion."
+          },
+          {
+            title: "Sapiens",
+            author: "Yuval Noah Harari",
+            application: "Today, question a cultural norm: Pick one societal 'truth' you follow automatically and ask yourself why you believe it. Is it serving you?"
+          },
+          {
+            title: "The Body Keeps Score",
+            author: "Bessel van der Kolk",
+            application: "Today, practice body awareness: Throughout the day, notice physical sensations in your body. When you feel tension, take 3 deep breaths and relax that area."
+          },
+          {
+            title: "Meditations",
+            author: "Marcus Aurelius",
+            application: "Today, practice Stoic acceptance: When something doesn't go your way, remind yourself 'This was not in my control' and focus on your response instead."
+          }
+        ];
+
+        const today = new Date();
+        const dayOfYear = Math.floor((today - new Date(today.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
+        const bookIndex = dayOfYear % books.length;
+        setCurrentBookApplication(books[bookIndex]);
+      }
+
+      function addToKnowledgeBase(note) {
+        const newEntry = {
+          id: Date.now(),
+          content: note.content,
+          source: note.source,
+          category: note.category,
+          dateAdded: new Date().toISOString(),
+          tags: note.tags || []
+        };
+
+        const updatedKnowledge = [newEntry, ...knowledgeBase];
+        setKnowledgeBase(updatedKnowledge);
+        localStorage.setItem('vita-knowledge-base', JSON.stringify(updatedKnowledge));
+      }
+
+      function addToSpacedRepetition(item) {
+        const newItem = {
+          id: Date.now(),
+          content: item.content,
+          source: item.source,
+          interval: 1, // days
+          nextReview: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // tomorrow
+          easeFactor: 2.5, // SuperMemo default
+          repetitions: 0,
+          lastReviewed: new Date().toISOString()
+        };
+
+        const updatedRepetition = [...spacedRepetition, newItem];
+        setSpacedRepetition(updatedRepetition);
+        localStorage.setItem('vita-spaced-repetition', JSON.stringify(updatedRepetition));
+      }
+
+      function reviewSpacedItem(itemId, quality) {
+        // SuperMemo-2 algorithm for spaced repetition
+        const item = spacedRepetition.find(i => i.id === itemId);
+        if (!item) return;
+
+        let newInterval, newEaseFactor;
+
+        if (quality >= 3) { // Correct response
+          if (item.repetitions === 0) {
+            newInterval = 1;
+          } else if (item.repetitions === 1) {
+            newInterval = 6;
+          } else {
+            newInterval = Math.round(item.interval * item.easeFactor);
+          }
+
+          newEaseFactor = item.easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+        } else { // Incorrect response
+          newInterval = 1;
+          newEaseFactor = item.easeFactor;
+        }
+
+        newEaseFactor = Math.max(1.3, newEaseFactor);
+
+        const updatedItem = {
+          ...item,
+          interval: newInterval,
+          easeFactor: newEaseFactor,
+          repetitions: quality >= 3 ? item.repetitions + 1 : 0,
+          nextReview: new Date(Date.now() + newInterval * 24 * 60 * 60 * 1000).toISOString(),
+          lastReviewed: new Date().toISOString()
+        };
+
+        const updatedRepetition = spacedRepetition.map(i =>
+          i.id === itemId ? updatedItem : i
+        ).filter(i => new Date(i.nextReview) > new Date()); // Remove completed items
+
+        setSpacedRepetition(updatedRepetition);
+        localStorage.setItem('vita-spaced-repetition', JSON.stringify(updatedRepetition));
       }
 
       console.log('Checking loading state:', { loading, data, workout });
@@ -918,6 +1090,11 @@
       }
 
       if (view === 'books') {
+        const [showAddNote, setShowAddNote] = useState(false);
+        const [showAddRepetition, setShowAddRepetition] = useState(false);
+        const [newNote, setNewNote] = useState({ content: '', source: '', category: '', tags: '' });
+        const [newRepetitionItem, setNewRepetitionItem] = useState({ content: '', source: '' });
+
         // Curated book database for self-improvement and entrepreneurship
         const bookDatabase = {
           productivity: [
@@ -1113,6 +1290,83 @@
                 <button onClick={() => setView('books')} className="px-2 py-2 bg-amber-600 text-white rounded text-xs">Books</button>
               </div>
 
+              {/* Knowledge Integration Header */}
+              <div className="bg-gradient-to-r from-purple-900 to-blue-900 rounded-xl p-6 mb-6 border border-purple-700">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-4xl">🧠</span>
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">Knowledge Integration</h2>
+                    <p className="text-purple-200">Transform reading into lifelong wisdom</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-purple-800 rounded-lg p-4">
+                    <h3 className="font-medium mb-2 text-purple-200">📝 Personal Knowledge</h3>
+                    <p className="text-2xl font-bold text-white">{knowledgeBase.length}</p>
+                    <p className="text-sm text-purple-300">Saved insights</p>
+                  </div>
+                  <div className="bg-blue-800 rounded-lg p-4">
+                    <h3 className="font-medium mb-2 text-blue-200">🔄 Spaced Repetition</h3>
+                    <p className="text-2xl font-bold text-white">{spacedRepetition.length}</p>
+                    <p className="text-sm text-blue-300">Ideas to review</p>
+                  </div>
+                  <div className="bg-green-800 rounded-lg p-4">
+                    <h3 className="font-medium mb-2 text-green-200">💡 Daily Application</h3>
+                    <p className="text-lg font-bold text-white">Ready</p>
+                    <p className="text-sm text-green-300">Apply ideas today</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Today's Application Challenge */}
+              {currentBookApplication && (
+                <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-amber-700">
+                  <div className="flex items-center gap-3 mb-4">
+                    <span className="text-3xl">🎯</span>
+                    <div>
+                      <h3 className="text-lg font-bold text-amber-400">Apply This Idea Today</h3>
+                      <p className="text-sm text-gray-400">From "{currentBookApplication.title}" by {currentBookApplication.author}</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-900 rounded-lg p-4 mb-4">
+                    <p className="text-white leading-relaxed">{currentBookApplication.application}</p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        addToKnowledgeBase({
+                          content: currentBookApplication.application,
+                          source: `${currentBookApplication.title} - Daily Application`,
+                          category: 'application',
+                          tags: ['daily-practice', 'implementation']
+                        });
+                        setSaveStatus('✅ Application saved to knowledge base!');
+                        setTimeout(() => setSaveStatus(''), 3000);
+                      }}
+                      className="flex-1 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
+                    >
+                      💾 Save to Knowledge Base
+                    </button>
+                    <button
+                      onClick={() => {
+                        addToSpacedRepetition({
+                          content: currentBookApplication.application,
+                          source: `${currentBookApplication.title} - Application`
+                        });
+                        setSaveStatus('🔄 Added to spaced repetition!');
+                        setTimeout(() => setSaveStatus(''), 3000);
+                      }}
+                      className="flex-1 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                    >
+                      🔄 Add to Spaced Repetition
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Today's Book Recommendation */}
               <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
                 <div className="flex items-start justify-between mb-4">
@@ -1173,6 +1427,258 @@
                     <p className="text-xs text-gray-500 mt-3">{books.length} books in this category</p>
                   </div>
                 ))}
+              </div>
+
+              {/* Knowledge Base Management */}
+              <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-purple-400">📝 Personal Knowledge Base</h3>
+                  <button
+                    onClick={() => setShowAddNote(true)}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    ➕ Add Note
+                  </button>
+                </div>
+
+                {/* Add Note Modal */}
+                {showAddNote && (
+                  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full mx-4">
+                      <h3 className="text-lg font-bold mb-4 text-purple-400">Add to Knowledge Base</h3>
+                      <div className="space-y-4">
+                        <textarea
+                          placeholder="Your insight, quote, or key learning..."
+                          value={newNote.content}
+                          onChange={(e) => setNewNote({...newNote, content: e.target.value})}
+                          className="w-full p-3 bg-slate-700 rounded-lg text-white placeholder-gray-400"
+                          rows="4"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Source (book, article, experience...)"
+                          value={newNote.source}
+                          onChange={(e) => setNewNote({...newNote, source: e.target.value})}
+                          className="w-full p-3 bg-slate-700 rounded-lg text-white placeholder-gray-400"
+                        />
+                        <select
+                          value={newNote.category}
+                          onChange={(e) => setNewNote({...newNote, category: e.target.value})}
+                          className="w-full p-3 bg-slate-700 rounded-lg text-white"
+                        >
+                          <option value="">Select category</option>
+                          <option value="mindset">Mindset</option>
+                          <option value="productivity">Productivity</option>
+                          <option value="leadership">Leadership</option>
+                          <option value="health">Health</option>
+                          <option value="finance">Finance</option>
+                          <option value="relationships">Relationships</option>
+                          <option value="personal">Personal</option>
+                        </select>
+                        <input
+                          type="text"
+                          placeholder="Tags (comma separated)"
+                          value={newNote.tags}
+                          onChange={(e) => setNewNote({...newNote, tags: e.target.value})}
+                          className="w-full p-3 bg-slate-700 rounded-lg text-white placeholder-gray-400"
+                        />
+                      </div>
+                      <div className="flex gap-2 mt-6">
+                        <button
+                          onClick={() => {
+                            if (newNote.content.trim()) {
+                              addToKnowledgeBase({
+                                ...newNote,
+                                tags: newNote.tags.split(',').map(tag => tag.trim()).filter(tag => tag)
+                              });
+                              setNewNote({ content: '', source: '', category: '', tags: '' });
+                              setShowAddNote(false);
+                              setSaveStatus('✅ Note added to knowledge base!');
+                              setTimeout(() => setSaveStatus(''), 3000);
+                            }
+                          }}
+                          className="flex-1 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => {
+                            setNewNote({ content: '', source: '', category: '', tags: '' });
+                            setShowAddNote(false);
+                          }}
+                          className="flex-1 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-500"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Knowledge Base Display */}
+                {knowledgeBase.length > 0 ? (
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {knowledgeBase.slice(0, 10).map((note) => (
+                      <div key={note.id} className="bg-slate-700 rounded-lg p-4">
+                        <p className="text-white mb-2">{note.content}</p>
+                        <div className="flex items-center justify-between text-sm">
+                          <div className="text-gray-400">
+                            {note.source && <span>📚 {note.source}</span>}
+                            {note.category && <span className="ml-2">🏷️ {note.category}</span>}
+                          </div>
+                          <span className="text-gray-500">
+                            {new Date(note.dateAdded).toLocaleDateString()}
+                          </span>
+                        </div>
+                        {note.tags && note.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {note.tags.map((tag, index) => (
+                              <span key={index} className="px-2 py-1 bg-purple-600 text-xs rounded">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {knowledgeBase.length > 10 && (
+                      <p className="text-center text-gray-400 py-2">
+                        +{knowledgeBase.length - 10} more notes in your knowledge base
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <span className="text-4xl mb-4 block">📝</span>
+                    <p className="text-gray-400">Your knowledge base is empty</p>
+                    <p className="text-sm text-gray-500">Start capturing insights from books, articles, and experiences</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Spaced Repetition Review */}
+              <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-blue-400">🔄 Spaced Repetition</h3>
+                  <button
+                    onClick={() => setShowAddRepetition(true)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    ➕ Add Item
+                  </button>
+                </div>
+
+                {/* Add Repetition Modal */}
+                {showAddRepetition && (
+                  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full mx-4">
+                      <h3 className="text-lg font-bold mb-4 text-blue-400">Add to Spaced Repetition</h3>
+                      <div className="space-y-4">
+                        <textarea
+                          placeholder="The idea or concept you want to remember..."
+                          value={newRepetitionItem.content}
+                          onChange={(e) => setNewRepetitionItem({...newRepetitionItem, content: e.target.value})}
+                          className="w-full p-3 bg-slate-700 rounded-lg text-white placeholder-gray-400"
+                          rows="4"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Source (book, video, experience...)"
+                          value={newRepetitionItem.source}
+                          onChange={(e) => setNewRepetitionItem({...newRepetitionItem, source: e.target.value})}
+                          className="w-full p-3 bg-slate-700 rounded-lg text-white placeholder-gray-400"
+                        />
+                      </div>
+                      <div className="flex gap-2 mt-6">
+                        <button
+                          onClick={() => {
+                            if (newRepetitionItem.content.trim()) {
+                              addToSpacedRepetition(newRepetitionItem);
+                              setNewRepetitionItem({ content: '', source: '' });
+                              setShowAddRepetition(false);
+                              setSaveStatus('🔄 Added to spaced repetition!');
+                              setTimeout(() => setSaveStatus(''), 3000);
+                            }
+                          }}
+                          className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                        >
+                          Add
+                        </button>
+                        <button
+                          onClick={() => {
+                            setNewRepetitionItem({ content: '', source: '' });
+                            setShowAddRepetition(false);
+                          }}
+                          className="flex-1 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-500"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Review Items */}
+                {spacedRepetition.length > 0 ? (
+                  <div className="space-y-3">
+                    {spacedRepetition.slice(0, 5).map((item) => (
+                      <div key={item.id} className="bg-slate-700 rounded-lg p-4">
+                        <div className="flex items-start gap-3">
+                          <span className="text-blue-400 mt-1">🧠</span>
+                          <div className="flex-1">
+                            <p className="text-white mb-2">{item.content}</p>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-gray-400">
+                                {item.source && `📚 ${item.source}`}
+                              </span>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => reviewSpacedItem(item.id, 5)}
+                                  className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+                                >
+                                  Easy
+                                </button>
+                                <button
+                                  onClick={() => reviewSpacedItem(item.id, 4)}
+                                  className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                                >
+                                  Good
+                                </button>
+                                <button
+                                  onClick={() => reviewSpacedItem(item.id, 3)}
+                                  className="px-3 py-1 bg-yellow-600 text-white rounded text-sm hover:bg-yellow-700"
+                                >
+                                  Hard
+                                </button>
+                                <button
+                                  onClick={() => reviewSpacedItem(item.id, 1)}
+                                  className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+                                >
+                                  Again
+                                </button>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                              <span>Repetition: {item.repetitions}</span>
+                              <span>Next: {new Date(item.nextReview).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {spacedRepetition.length > 5 && (
+                      <p className="text-center text-gray-400 py-2">
+                        +{spacedRepetition.length - 5} more items to review
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <span className="text-4xl mb-4 block">🔄</span>
+                    <p className="text-gray-400">No items in spaced repetition</p>
+                    <p className="text-sm text-gray-500">Add important ideas you want to remember long-term</p>
+                  </div>
+                )}
               </div>
 
               {/* Reading Challenge */}
@@ -1395,7 +1901,9 @@
                 <button onClick={() => setView('affirmations')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Affirmations</button>
                 <button onClick={() => setView('coach')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Coach</button>
                 <button onClick={() => setView('books')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Books</button>
-                <button onClick={() => setView('nutrition')} className="px-3 py-2 bg-amber-600 text-white rounded-lg text-xs">Nutrition</button>
+                <button onClick={() => setView('nutrition')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Nutrition</button>
+                <button onClick={() => setView('intelligence')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Intelligence</button>
+                <button onClick={() => setView('wellness')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Wellness</button>
               </div>
 
               {/* Daily Totals */}
@@ -1549,6 +2057,753 @@
                       className="bg-blue-500 h-2 rounded-full"
                       style={{ width: `${Math.min((dailyTotals.protein / 150) * 100, 100)}%` }}
                     ></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      if (view === 'intelligence') {
+        // Analyze patterns and provide personalized insights
+        const analyzePatterns = () => {
+          if (history.length < 7) {
+            return {
+              insights: [],
+              message: "Need at least 7 days of data to generate insights. Keep tracking!"
+            };
+          }
+
+          const insights = [];
+          const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+          // Analyze workout patterns
+          const workoutDays = history.filter(d => d.workoutDone);
+          if (workoutDays.length > 0) {
+            const workoutDayCounts = {};
+            workoutDays.forEach(day => {
+              const dayName = new Date(day.date).toLocaleDateString('en-US', { weekday: 'long' });
+              workoutDayCounts[dayName] = (workoutDayCounts[dayName] || 0) + 1;
+            });
+
+            const bestWorkoutDay = Object.entries(workoutDayCounts)
+              .sort(([,a], [,b]) => b - a)[0]?.[0];
+
+            if (bestWorkoutDay) {
+              insights.push({
+                type: 'workout',
+                icon: '💪',
+                title: 'Workout Patterns',
+                insight: `You workout most consistently on ${bestWorkoutDay}s. Consider scheduling important workouts on this day.`,
+                impact: 'High'
+              });
+            }
+          }
+
+          // Analyze task completion vs mood
+          const moodData = history.filter(d => d.mood);
+          if (moodData.length > 3) {
+            const moodTaskCorrelation = {};
+            moodData.forEach(day => {
+              const mood = day.mood;
+              const taskRate = day.done ? (day.done.length / 18) * 100 : 0;
+              if (!moodTaskCorrelation[mood]) moodTaskCorrelation[mood] = [];
+              moodTaskCorrelation[mood].push(taskRate);
+            });
+
+            const bestMood = Object.entries(moodTaskCorrelation)
+              .map(([mood, rates]) => ({
+                mood,
+                avgTasks: rates.reduce((a, b) => a + b, 0) / rates.length
+              }))
+              .sort((a, b) => b.avgTasks - a.avgTasks)[0];
+
+            if (bestMood && bestMood.avgTasks > 50) {
+              insights.push({
+                type: 'mood',
+                icon: '😊',
+                title: 'Mood & Productivity',
+                insight: `You're most productive when feeling ${bestMood.mood} (${Math.round(bestMood.avgTasks)}% task completion). Try to cultivate this emotional state.`,
+                impact: 'High'
+              });
+            }
+          }
+
+          // Analyze reading patterns
+          const readingDays = history.filter(d => d.done && d.done.some(task => task.includes('read')));
+          if (readingDays.length > 0) {
+            const avgTasksOnReadingDays = readingDays.reduce((sum, day) => sum + (day.done ? day.done.length : 0), 0) / readingDays.length;
+            const avgTasksOverall = history.reduce((sum, day) => sum + (day.done ? day.done.length : 0), 0) / history.length;
+
+            if (avgTasksOnReadingDays > avgTasksOverall + 2) {
+              insights.push({
+                type: 'reading',
+                icon: '📚',
+                title: 'Reading Impact',
+                insight: `You complete ${Math.round(avgTasksOnReadingDays - avgTasksOverall)} more tasks on days you read. Reading boosts your productivity!`,
+                impact: 'Medium'
+              });
+            }
+          }
+
+          // Analyze water intake patterns
+          const waterData = history.filter(d => d.water && d.water > 0);
+          if (waterData.length > 3) {
+            const avgTasksWithWater = waterData.reduce((sum, day) => sum + (day.done ? day.done.length : 0), 0) / waterData.length;
+            const avgTasksOverall = history.reduce((sum, day) => sum + (day.done ? day.done.length : 0), 0) / history.length;
+
+            if (avgTasksWithWater > avgTasksOverall + 1) {
+              insights.push({
+                type: 'hydration',
+                icon: '💧',
+                title: 'Hydration Habits',
+                insight: `You perform better when staying hydrated. Consider increasing water intake for optimal productivity.`,
+                impact: 'Medium'
+              });
+            }
+          }
+
+          // Analyze sleep patterns (using morning routine as proxy)
+          const morningRoutineDays = history.filter(d => d.done && d.done.some(task => task.includes('cold') || task.includes('sun')));
+          if (morningRoutineDays.length > 0) {
+            const avgTasksMorningDays = morningRoutineDays.reduce((sum, day) => sum + (day.done ? day.done.length : 0), 0) / morningRoutineDays.length;
+            const avgTasksOverall = history.reduce((sum, day) => sum + (day.done ? day.done.length : 0), 0) / history.length;
+
+            if (avgTasksMorningDays > avgTasksOverall + 1) {
+              insights.push({
+                type: 'routine',
+                icon: '🌅',
+                title: 'Morning Routine',
+                insight: `Your morning routine (cold exposure/sunlight) boosts productivity by ${Math.round(avgTasksMorningDays - avgTasksOverall)} tasks per day.`,
+                impact: 'High'
+              });
+            }
+          }
+
+          // Analyze deep work patterns
+          const deepWorkDays = history.filter(d => d.deepWork && parseFloat(d.deepWork) > 0);
+          if (deepWorkDays.length > 3) {
+            const deepWorkTaskCorr = deepWorkDays.map(day => ({
+              deepWork: parseFloat(day.deepWork) || 0,
+              tasks: day.done ? day.done.length : 0
+            }));
+
+            const correlation = deepWorkTaskCorr.reduce((sum, data) => sum + (data.deepWork * data.tasks), 0) /
+                              deepWorkTaskCorr.length;
+
+            if (correlation > 5) {
+              insights.push({
+                type: 'focus',
+                icon: '🎯',
+                title: 'Deep Work Benefits',
+                insight: `Your deep work sessions strongly correlate with task completion. More focused time = better results.`,
+                impact: 'High'
+              });
+            }
+          }
+
+          return {
+            insights,
+            message: insights.length === 0 ? "Keep tracking for more personalized insights!" : `Found ${insights.length} patterns in your data!`
+          };
+        };
+
+        const { insights, message } = analyzePatterns();
+
+        return (
+          <div className="min-h-screen p-4">
+            <div className="max-w-4xl mx-auto">
+              <h1 className="text-4xl font-bold mb-4 text-center">Vita</h1>
+              <div className="flex gap-1 justify-center mb-6 flex-wrap">
+                <button onClick={() => setView('today')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Today</button>
+                <button onClick={() => setView('progress')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Progress</button>
+                <button onClick={() => setView('workouts')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Workouts</button>
+                <button onClick={() => setView('affirmations')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Affirmations</button>
+                <button onClick={() => setView('coach')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Coach</button>
+                <button onClick={() => setView('books')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Books</button>
+                <button onClick={() => setView('nutrition')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Nutrition</button>
+                <button onClick={() => setView('intelligence')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Intelligence</button>
+                <button onClick={() => setView('wellness')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Wellness</button>
+              </div>
+
+              <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-3xl">🔁</span>
+                  <div>
+                    <h2 className="text-2xl font-bold text-amber-400">Habit Intelligence</h2>
+                    <p className="text-gray-300">Adaptive insights based on your patterns</p>
+                  </div>
+                </div>
+
+                <div className="bg-slate-700 rounded-lg p-4 mb-4">
+                  <p className="text-lg text-white">{message}</p>
+                  <p className="text-sm text-gray-400 mt-1">
+                    Data from last {history.length} days analyzed
+                  </p>
+                </div>
+
+                {history.length >= 7 && (
+                  <div className="text-center">
+                    <button
+                      onClick={() => {
+                        setSaveStatus('🔄 Re-analyzing your patterns...');
+                        setTimeout(() => setSaveStatus(''), 2000);
+                      }}
+                      className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
+                    >
+                      🔄 Refresh Insights
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Insights List */}
+              {insights.length > 0 && (
+                <div className="space-y-4">
+                  {insights.map((insight, index) => (
+                    <div key={index} className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                      <div className="flex items-start gap-4">
+                        <div className="text-3xl">{insight.icon}</div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h3 className="text-lg font-bold text-amber-400">{insight.title}</h3>
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              insight.impact === 'High' ? 'bg-red-600 text-white' :
+                              insight.impact === 'Medium' ? 'bg-yellow-600 text-white' :
+                              'bg-green-600 text-white'
+                            }`}>
+                              {insight.impact} Impact
+                            </span>
+                          </div>
+                          <p className="text-gray-300 leading-relaxed">{insight.insight}</p>
+
+                          <div className="mt-4 flex gap-2">
+                            <button className="px-3 py-1 bg-slate-700 text-white rounded text-sm hover:bg-slate-600">
+                              ✅ Applied
+                            </button>
+                            <button className="px-3 py-1 bg-slate-600 text-white rounded text-sm hover:bg-slate-500">
+                              🤔 Not Relevant
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Pattern Visualization */}
+              {history.length >= 7 && (
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mt-6">
+                  <h3 className="text-lg font-bold mb-4 text-amber-400">📊 Your Patterns</h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-slate-700 rounded-lg p-4">
+                      <h4 className="font-medium mb-3 text-green-400">Most Productive Day</h4>
+                      <p className="text-2xl font-bold text-white">
+                        {(() => {
+                          const dayAverages = {};
+                          history.forEach(day => {
+                            const dayName = new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' });
+                            if (!dayAverages[dayName]) dayAverages[dayName] = [];
+                            dayAverages[dayName].push(day.done ? day.done.length : 0);
+                          });
+
+                          const averages = Object.entries(dayAverages).map(([day, tasks]) => ({
+                            day,
+                            avg: tasks.reduce((a, b) => a + b, 0) / tasks.length
+                          }));
+
+                          return averages.sort((a, b) => b.avg - a.avg)[0]?.day || 'N/A';
+                        })()}
+                      </p>
+                      <p className="text-sm text-gray-400">Highest task completion</p>
+                    </div>
+
+                    <div className="bg-slate-700 rounded-lg p-4">
+                      <h4 className="font-medium mb-3 text-blue-400">Consistency Score</h4>
+                      <p className="text-2xl font-bold text-white">
+                        {Math.round((history.filter(d => d.done && d.done.length > 0).length / history.length) * 100)}%
+                      </p>
+                      <p className="text-sm text-gray-400">Days with activity</p>
+                    </div>
+
+                    <div className="bg-slate-700 rounded-lg p-4">
+                      <h4 className="font-medium mb-3 text-purple-400">Workout Frequency</h4>
+                      <p className="text-2xl font-bold text-white">
+                        {Math.round((history.filter(d => d.workoutDone).length / history.length) * 100)}%
+                      </p>
+                      <p className="text-sm text-gray-400">Days with workouts</p>
+                    </div>
+
+                    <div className="bg-slate-700 rounded-lg p-4">
+                      <h4 className="font-medium mb-3 text-yellow-400">Reading Streak</h4>
+                      <p className="text-2xl font-bold text-white">
+                        {(() => {
+                          let currentStreak = 0;
+                          let maxStreak = 0;
+                          for (let i = history.length - 1; i >= 0; i--) {
+                            if (history[i].done && history[i].done.some(task => task.includes('read'))) {
+                              currentStreak++;
+                              maxStreak = Math.max(maxStreak, currentStreak);
+                            } else {
+                              currentStreak = 0;
+                            }
+                          }
+                          return maxStreak;
+                        })()} days
+                      </p>
+                      <p className="text-sm text-gray-400">Longest reading streak</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Future Predictions */}
+              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mt-6">
+                <h3 className="text-lg font-bold mb-4 text-amber-400">🔮 Tomorrow's Predictions</h3>
+                <div className="space-y-3">
+                  {(() => {
+                    const predictions = [];
+
+                    // Workout prediction
+                    const recentWorkouts = history.slice(-7).filter(d => d.workoutDone).length;
+                    if (recentWorkouts >= 4) {
+                      predictions.push("High chance you'll complete tomorrow's workout based on your recent consistency!");
+                    } else if (recentWorkouts <= 2) {
+                      predictions.push("Consider scheduling tomorrow's workout - your pattern shows you might skip otherwise.");
+                    }
+
+                    // Productivity prediction
+                    const avgTasks = history.slice(-7).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 7;
+                    if (avgTasks >= 12) {
+                      predictions.push("You're on a productivity high - tomorrow could be another strong day!");
+                    } else if (avgTasks <= 6) {
+                      predictions.push("Tomorrow might be challenging - consider starting with your easiest task first.");
+                    }
+
+                    // Mood prediction based on recent patterns
+                    const recentMoods = history.slice(-3).filter(d => d.mood).map(d => d.mood);
+                    if (recentMoods.length > 0) {
+                      const mostCommonMood = recentMoods.sort((a,b) =>
+                        recentMoods.filter(v => v===a).length - recentMoods.filter(v => v===b).length
+                      ).pop();
+                      predictions.push(`Based on recent days, you might feel ${mostCommonMood} tomorrow.`);
+                    }
+
+                    return predictions.length > 0 ? predictions : ["Keep tracking for personalized predictions!"];
+                  })().map((prediction, index) => (
+                    <div key={index} className="flex items-start gap-3 p-3 bg-slate-700 rounded-lg">
+                      <span className="text-amber-400 mt-1">💡</span>
+                      <p className="text-gray-300 text-sm">{prediction}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      if (view === 'wellness') {
+        // Analyze mood and energy patterns with correlations
+        const analyzeWellness = () => {
+          if (history.length < 3) {
+            return {
+              moodEnergyData: [],
+              correlations: [],
+              insights: [],
+              message: "Need at least 3 days of mood/energy data. Start tracking your feelings!"
+            };
+          }
+
+          const moodEnergyData = history.filter(d => d.mood || d.energyLevel).map(day => ({
+            date: day.date,
+            mood: day.mood,
+            energy: day.energyLevel,
+            tasks: day.done ? day.done.length : 0,
+            workoutDone: day.workoutDone,
+            water: day.water || 0,
+            sleepQuality: day.done && day.done.some(task => task.includes('sleep')) ? 'good' : 'unknown',
+            socialTime: day.done && day.done.some(task => task.includes('connect')) ? 'yes' : 'no',
+            deepWork: day.deepWork ? parseFloat(day.deepWork) : 0,
+            nutritionLogged: false // We'll check nutrition data separately
+          }));
+
+          // Calculate correlations
+          const correlations = [];
+
+          // Mood vs Task Completion
+          const moodTaskData = moodEnergyData.filter(d => d.mood);
+          if (moodTaskData.length >= 3) {
+            const moodScores = { '😊 Sharp': 5, '🙂 Good': 4, '😐 Okay': 3, '😔 Off': 2, '😰 Hard': 1 };
+            const avgTasksByMood = {};
+            moodTaskData.forEach(d => {
+              if (!avgTasksByMood[d.mood]) avgTasksByMood[d.mood] = [];
+              avgTasksByMood[d.mood].push(d.tasks);
+            });
+
+            const moodCorrelations = Object.entries(avgTasksByMood).map(([mood, tasks]) => ({
+              factor: mood,
+              avgTasks: tasks.reduce((a, b) => a + b, 0) / tasks.length,
+              moodScore: moodScores[mood] || 3
+            })).sort((a, b) => b.avgTasks - a.avgTasks);
+
+            correlations.push({
+              title: 'Mood vs Productivity',
+              factor: 'Emotional State',
+              data: moodCorrelations,
+              insight: `${moodCorrelations[0].factor} days show ${Math.round(moodCorrelations[0].avgTasks)} avg tasks vs ${moodCorrelations[moodCorrelations.length-1].factor} days with ${Math.round(moodCorrelations[moodCorrelations.length-1].avgTasks)} avg tasks`,
+              recommendation: `Prioritize activities that help you feel ${moodCorrelations[0].factor.split(' ')[1]}`
+            });
+          }
+
+          // Energy vs Workouts
+          const energyWorkoutData = moodEnergyData.filter(d => d.energy);
+          if (energyWorkoutData.length >= 3) {
+            const energyLevels = { 'high': 4, 'good': 3, 'low': 2, 'exhausted': 1 };
+            const workoutRates = {};
+            energyWorkoutData.forEach(d => {
+              const energy = d.energy;
+              if (!workoutRates[energy]) workoutRates[energy] = { total: 0, workouts: 0 };
+              workoutRates[energy].total++;
+              if (d.workoutDone) workoutRates[energy].workouts++;
+            });
+
+            const energyCorrelations = Object.entries(workoutRates).map(([energy, data]) => ({
+              factor: energy,
+              workoutRate: (data.workouts / data.total) * 100,
+              energyScore: energyLevels[energy] || 2
+            })).sort((a, b) => b.workoutRate - a.workoutRate);
+
+            correlations.push({
+              title: 'Energy vs Workouts',
+              factor: 'Energy Level',
+              data: energyCorrelations,
+              insight: `${energyCorrelations[0].factor} energy days have ${Math.round(energyCorrelations[0].workoutRate)}% workout completion vs ${energyCorrelations[energyCorrelations.length-1].factor} days with ${Math.round(energyCorrelations[energyCorrelations.length-1].workoutRate)}%`,
+              recommendation: `Schedule workouts on ${energyCorrelations[0].factor} energy days for better consistency`
+            });
+          }
+
+          // Sleep vs Energy
+          const sleepEnergyData = moodEnergyData.filter(d => d.energy && d.sleepQuality !== 'unknown');
+          if (sleepEnergyData.length >= 3) {
+            const sleepEnergyCorr = sleepEnergyData.reduce((acc, d) => {
+              const key = d.sleepQuality;
+              if (!acc[key]) acc[key] = { count: 0, totalEnergy: 0 };
+              acc[key].count++;
+              acc[key].totalEnergy += d.energy === 'high' ? 4 : d.energy === 'good' ? 3 : d.energy === 'low' ? 2 : 1;
+              return acc;
+            }, {});
+
+            const sleepInsights = Object.entries(sleepEnergyCorr).map(([sleep, data]) => ({
+              sleep,
+              avgEnergy: data.totalEnergy / data.count,
+              count: data.count
+            })).sort((a, b) => b.avgEnergy - a.avgEnergy);
+
+            correlations.push({
+              title: 'Sleep vs Energy',
+              factor: 'Sleep Quality',
+              data: sleepInsights,
+              insight: `${sleepInsights[0].sleep} sleep correlates with ${Math.round(sleepInsights[0].avgEnergy * 25)}% higher energy levels`,
+              recommendation: `Prioritize ${sleepInsights[0].sleep} sleep to maintain high energy throughout the day`
+            });
+          }
+
+          // Social Time vs Stress/Mood
+          const socialMoodData = moodEnergyData.filter(d => d.mood);
+          if (socialMoodData.length >= 3) {
+            const socialMoodCorr = socialMoodData.reduce((acc, d) => {
+              const social = d.socialTime;
+              const moodScore = { '😊 Sharp': 5, '🙂 Good': 4, '😐 Okay': 3, '😔 Off': 2, '😰 Hard': 1 }[d.mood] || 3;
+              if (!acc[social]) acc[social] = { count: 0, totalMood: 0 };
+              acc[social].count++;
+              acc[social].totalMood += moodScore;
+              return acc;
+            }, {});
+
+            const socialInsights = Object.entries(socialMoodCorr).map(([social, data]) => ({
+              social: social === 'yes' ? 'With Social Time' : 'Without Social Time',
+              avgMood: data.totalMood / data.count,
+              count: data.count
+            })).sort((a, b) => b.avgMood - a.avgMood);
+
+            correlations.push({
+              title: 'Social Time vs Mood',
+              factor: 'Social Connection',
+              data: socialInsights,
+              insight: `Days ${socialInsights[0].social.toLowerCase()} show ${Math.round((socialInsights[0].avgMood / 5) * 100)}% better mood scores`,
+              recommendation: `Incorporate meaningful social connections to improve your emotional wellbeing`
+            });
+          }
+
+          // Generate insights
+          const insights = [];
+
+          // Current day analysis
+          const today = new Date().toLocaleDateString();
+          const todayData = moodEnergyData.find(d => new Date(d.date).toLocaleDateString() === today);
+
+          if (todayData) {
+            if (todayData.energy === 'low' || todayData.energy === 'exhausted') {
+              insights.push({
+                type: 'energy',
+                priority: 'high',
+                message: 'Low energy detected. Consider a short walk, hydration, or light stretching.',
+                icon: '🔋'
+              });
+            }
+
+            if (todayData.mood === '😰 Hard' || todayData.mood === '😔 Off') {
+              insights.push({
+                type: 'mood',
+                priority: 'high',
+                message: 'Challenging mood detected. Try deep breathing, gratitude, or connecting with someone.',
+                icon: '🧘'
+              });
+            }
+          }
+
+          // Pattern-based insights
+          if (correlations.length > 0) {
+            const topCorrelation = correlations[0];
+            insights.push({
+              type: 'pattern',
+              priority: 'medium',
+              message: `Pattern discovered: ${topCorrelation.insight}`,
+              icon: '📊'
+            });
+          }
+
+          return {
+            moodEnergyData,
+            correlations,
+            insights,
+            message: insights.length > 0 ? `Found ${insights.length} wellness insights!` : "Keep tracking mood & energy for personalized insights."
+          };
+        };
+
+        const { moodEnergyData, correlations, insights, message } = analyzeWellness();
+
+        // Get current mood/energy stats
+        const currentMood = data.mood;
+        const currentEnergy = data.energyLevel;
+
+        return (
+          <div className="min-h-screen p-4">
+            <div className="max-w-4xl mx-auto">
+              <h1 className="text-4xl font-bold mb-4 text-center">Vita</h1>
+              <div className="flex gap-1 justify-center mb-6 flex-wrap">
+                <button onClick={() => setView('today')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Today</button>
+                <button onClick={() => setView('progress')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Progress</button>
+                <button onClick={() => setView('workouts')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Workouts</button>
+                <button onClick={() => setView('affirmations')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Affirmations</button>
+                <button onClick={() => setView('coach')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Coach</button>
+                <button onClick={() => setView('books')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Books</button>
+                <button onClick={() => setView('nutrition')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Nutrition</button>
+                <button onClick={() => setView('intelligence')} className="px-2 py-2 bg-slate-700 text-gray-300 rounded text-xs">Intelligence</button>
+                <button onClick={() => setView('wellness')} className="px-2 py-2 bg-amber-600 text-white rounded text-xs">Wellness</button>
+              </div>
+
+              {/* Current Status */}
+              <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+                <h2 className="text-2xl font-bold mb-4 text-center text-amber-400">🏥 Wellness Dashboard</h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div className="bg-slate-700 rounded-lg p-4">
+                    <h3 className="font-medium mb-3 text-blue-400">Current Mood</h3>
+                    <div className="text-3xl mb-2">{currentMood || 'Not set'}</div>
+                    <p className="text-sm text-gray-400">
+                      {currentMood ? 'Feeling tracked' : 'Tap to set your mood'}
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-700 rounded-lg p-4">
+                    <h3 className="font-medium mb-3 text-green-400">Current Energy</h3>
+                    <div className="text-3xl mb-2">
+                      {currentEnergy === 'high' && '⚡ High'}
+                      {currentEnergy === 'good' && '🔋 Good'}
+                      {currentEnergy === 'low' && '🪫 Low'}
+                      {currentEnergy === 'exhausted' && '😴 Exhausted'}
+                      {!currentEnergy && 'Not set'}
+                    </div>
+                    <p className="text-sm text-gray-400">
+                      {currentEnergy ? 'Energy level tracked' : 'Tap to set your energy'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-center">
+                  <p className="text-lg text-white mb-2">{message}</p>
+                  <p className="text-sm text-gray-400">
+                    Based on {moodEnergyData.length} days of wellness data
+                  </p>
+                </div>
+              </div>
+
+              {/* Wellness Insights */}
+              {insights.length > 0 && (
+                <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+                  <h3 className="text-lg font-bold mb-4 text-amber-400">💡 Wellness Insights</h3>
+                  <div className="space-y-3">
+                    {insights.map((insight, index) => (
+                      <div key={index} className={`flex items-start gap-4 p-4 rounded-lg ${
+                        insight.priority === 'high' ? 'bg-red-900 border border-red-700' :
+                        insight.priority === 'medium' ? 'bg-yellow-900 border border-yellow-700' :
+                        'bg-slate-700'
+                      }`}>
+                        <span className="text-2xl">{insight.icon}</span>
+                        <div className="flex-1">
+                          <p className="text-white font-medium">{insight.message}</p>
+                          <div className="mt-2 flex gap-2">
+                            <button className="px-3 py-1 bg-slate-600 text-white rounded text-sm hover:bg-slate-500">
+                              ✅ Applied
+                            </button>
+                            <button className="px-3 py-1 bg-slate-600 text-white rounded text-sm hover:bg-slate-500">
+                              🤔 Later
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Correlations Analysis */}
+              {correlations.length > 0 && (
+                <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+                  <h3 className="text-lg font-bold mb-4 text-amber-400">🔗 Wellness Correlations</h3>
+                  <div className="space-y-4">
+                    {correlations.map((correlation, index) => (
+                      <div key={index} className="bg-slate-700 rounded-lg p-4">
+                        <h4 className="font-medium mb-2 text-blue-400">{correlation.title}</h4>
+                        <p className="text-gray-300 text-sm mb-3">{correlation.insight}</p>
+                        <div className="bg-slate-600 rounded p-3">
+                          <p className="text-sm text-amber-400">💡 {correlation.recommendation}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Wellness Trends */}
+              {moodEnergyData.length >= 7 && (
+                <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+                  <h3 className="text-lg font-bold mb-4 text-amber-400">📈 Wellness Trends (Last 7 Days)</h3>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-slate-700 rounded-lg p-4 text-center">
+                      <h4 className="font-medium mb-2 text-green-400">Avg Mood Score</h4>
+                      <p className="text-2xl font-bold">
+                        {(() => {
+                          const recentData = moodEnergyData.slice(-7);
+                          const moodScores = recentData
+                            .filter(d => d.mood)
+                            .map(d => ({ '😊 Sharp': 5, '🙂 Good': 4, '😐 Okay': 3, '😔 Off': 2, '😰 Hard': 1 }[d.mood] || 3));
+                          return moodScores.length > 0 ? Math.round((moodScores.reduce((a, b) => a + b, 0) / moodScores.length) * 20) + '%' : 'N/A';
+                        })()}
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-700 rounded-lg p-4 text-center">
+                      <h4 className="font-medium mb-2 text-blue-400">Energy Days</h4>
+                      <p className="text-2xl font-bold">
+                        {moodEnergyData.slice(-7).filter(d => d.energy === 'high' || d.energy === 'good').length}/7
+                      </p>
+                      <p className="text-xs text-gray-400">high/good energy</p>
+                    </div>
+
+                    <div className="bg-slate-700 rounded-lg p-4 text-center">
+                      <h4 className="font-medium mb-2 text-purple-400">Best Mood Day</h4>
+                      <p className="text-lg font-bold">
+                        {(() => {
+                          const dayMoods = {};
+                          moodEnergyData.slice(-7).forEach(d => {
+                            const day = new Date(d.date).toLocaleDateString('en-US', { weekday: 'short' });
+                            if (d.mood && !dayMoods[day]) dayMoods[day] = d.mood;
+                          });
+                          const bestDay = Object.entries(dayMoods)
+                            .map(([day, mood]) => ({ day, score: { '😊 Sharp': 5, '🙂 Good': 4, '😐 Okay': 3, '😔 Off': 2, '😰 Hard': 1 }[mood] || 3 }))
+                            .sort((a, b) => b.score - a.score)[0];
+                          return bestDay ? bestDay.day : 'N/A';
+                        })()}
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-700 rounded-lg p-4 text-center">
+                      <h4 className="font-medium mb-2 text-yellow-400">Wellness Streak</h4>
+                      <p className="text-2xl font-bold">
+                        {(() => {
+                          let streak = 0;
+                          for (let i = moodEnergyData.length - 1; i >= 0; i--) {
+                            if (moodEnergyData[i].mood || moodEnergyData[i].energy) {
+                              streak++;
+                            } else {
+                              break;
+                            }
+                          }
+                          return streak;
+                        })()}
+                      </p>
+                      <p className="text-xs text-gray-400">days tracking</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Wellness Tips */}
+              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <h3 className="text-lg font-bold mb-4 text-amber-400">🌱 Wellness Tips</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3">
+                      <span className="text-green-400 mt-1">💧</span>
+                      <div>
+                        <p className="font-medium text-white">Hydration Boost</p>
+                        <p className="text-sm text-gray-400">Drink water when feeling low energy</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <span className="text-blue-400 mt-1">🏃</span>
+                      <div>
+                        <p className="font-medium text-white">Movement Matters</p>
+                        <p className="text-sm text-gray-400">Short walks improve mood instantly</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <span className="text-purple-400 mt-1">😴</span>
+                      <div>
+                        <p className="font-medium text-white">Sleep Priority</p>
+                        <p className="text-sm text-gray-400">7-9 hours transforms energy levels</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3">
+                      <span className="text-yellow-400 mt-1">🤝</span>
+                      <div>
+                        <p className="font-medium text-white">Social Connection</p>
+                        <p className="text-sm text-gray-400">Meaningful conversations lift mood</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <span className="text-red-400 mt-1">📝</span>
+                      <div>
+                        <p className="font-medium text-white">Gratitude Practice</p>
+                        <p className="text-sm text-gray-400">3 daily thanks shift perspective</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <span className="text-pink-400 mt-1">🧘</span>
+                      <div>
+                        <p className="font-medium text-white">Mindful Breathing</p>
+                        <p className="text-sm text-gray-400">4-7-8 breathing reduces stress</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1844,13 +3099,33 @@
             </div>
 
             <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
-              <h3 className="mb-3">Mood</h3>
+              <h3 className="mb-4">😊 Mood & Energy</h3>
+
+              <div className="mb-4">
+                <h4 className="text-sm font-medium text-gray-400 mb-2">How are you feeling?</h4>
               <div className="flex gap-2 flex-wrap">
                 {['😊 Sharp', '🙂 Good', '😐 Okay', '😔 Off', '😰 Hard'].map(m => (
-                  <button key={m} onClick={async () => { const nd = { ...data, mood: m }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} className={`px-4 py-2 rounded-lg ${data.mood === m ? 'bg-amber-500 text-white' : 'bg-slate-700 text-gray-300'}`}>
+                    <button key={m} onClick={async () => { const nd = { ...data, mood: m }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} className={`px-4 py-2 rounded-lg ${data.mood === m ? 'bg-amber-500 text-white' : 'bg-slate-700 text-gray-300'}`}>
                     {m}
                   </button>
                 ))}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-medium text-gray-400 mb-2">Energy Level</h4>
+                <div className="flex gap-2 flex-wrap">
+                  {[
+                    { emoji: '⚡', label: 'High Energy', value: 'high' },
+                    { emoji: '🔋', label: 'Good Energy', value: 'good' },
+                    { emoji: '🪫', label: 'Low Energy', value: 'low' },
+                    { emoji: '😴', label: 'Exhausted', value: 'exhausted' }
+                  ].map(e => (
+                    <button key={e.value} onClick={async () => { const nd = { ...data, energyLevel: e.value }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} className={`px-4 py-2 rounded-lg ${data.energyLevel === e.value ? 'bg-blue-500 text-white' : 'bg-slate-700 text-gray-300'}`}>
+                      {e.emoji} {e.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
