@@ -63,6 +63,10 @@
       const [showCreateChallenge, setShowCreateChallenge] = useState(false);
       const [aiCoachInsights, setAiCoachInsights] = useState({}); // AI coach analysis and insights
       const [coachMode, setCoachMode] = useState('daily'); // daily, weekly, monthly
+      const [showAddNote, setShowAddNote] = useState(false);
+      const [showAddRepetition, setShowAddRepetition] = useState(false);
+      const [newNote, setNewNote] = useState({ content: '', source: '', category: '', tags: '' });
+      const [newRepetitionItem, setNewRepetitionItem] = useState({ content: '', source: '' });
 
       console.log('All state initialized successfully');
 
@@ -1563,10 +1567,6 @@
       }
 
       if (view === 'books') {
-        const [showAddNote, setShowAddNote] = useState(false);
-        const [showAddRepetition, setShowAddRepetition] = useState(false);
-        const [newNote, setNewNote] = useState({ content: '', source: '', category: '', tags: '' });
-        const [newRepetitionItem, setNewRepetitionItem] = useState({ content: '', source: '' });
 
         // Curated book database for self-improvement and entrepreneurship
         const bookDatabase = {
