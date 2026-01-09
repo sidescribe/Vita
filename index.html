@@ -387,8 +387,24 @@
                   weights: parsed.weights || {},
                   workoutDone: parsed.workoutDone || false,
                   workoutType: parsed.workoutType || null,
+                  workoutExercises: parsed.workoutExercises || null,
                   mood: parsed.mood || null,
-                  energyLevel: parsed.energyLevel || null
+                  energyLevel: parsed.energyLevel || null,
+                  // Add nutrition data for this day
+                  nutritionData: (() => {
+                    try {
+                      const nutritionKey = parsed.date || k.replace('day:', '');
+                      const savedNutrition = localStorage.getItem('vita-nutrition');
+                      if (savedNutrition) {
+                        const nutritionData = JSON.parse(savedNutrition);
+                        return nutritionData[nutritionKey] || null;
+                      }
+                      return null;
+                    } catch (e) {
+                      console.error('Error loading nutrition data for history:', e);
+                      return null;
+                    }
+                  })()
                 };
               } catch (e) {
                 console.error('Error loading history item:', k, e);
@@ -4686,14 +4702,16 @@
                       </p>
                       {viewingDay.miles && <p className="text-sm text-gray-300">{viewingDay.miles} miles run</p>}
 
-                      {viewingDay.workoutDone && viewingDay.weights && Object.keys(viewingDay.weights).length > 0 && (
+                      {viewingDay.workoutDone && viewingDay.workoutExercises && viewingDay.workoutExercises.length > 0 && (
                         <div className="mt-3">
                           <p className="text-xs text-gray-400 mb-2">Exercises Completed:</p>
                           <div className="space-y-1">
-                            {Object.entries(viewingDay.weights).map(([exercise, weight]) => (
-                              <div key={exercise} className="flex justify-between text-sm">
-                                <span className="text-gray-300">{exercise}:</span>
-                                <span className="text-amber-400 font-medium">{weight} lbs</span>
+                            {viewingDay.workoutExercises.map((exercise, idx) => (
+                              <div key={idx} className="flex justify-between text-sm">
+                                <span className="text-gray-300">{exercise}</span>
+                                {viewingDay.weights && viewingDay.weights[exercise] && (
+                                  <span className="text-amber-400 font-medium">{viewingDay.weights[exercise]} lbs</span>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -4729,6 +4747,63 @@
                       <h3 className="font-bold mb-2">Reflection</h3>
                       <div className="bg-slate-700 rounded p-3 text-sm text-gray-300">
                         {viewingDay.journal}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SaaS Work Section */}
+                  {(viewingDay.saas || viewingDay.deepWork || viewingDay.talks) && (
+                    <div className="mb-4">
+                      <h3 className="font-bold mb-2">💼 SaaS Work</h3>
+                      <div className="bg-slate-700 rounded p-3 text-sm">
+                        {viewingDay.saas && (
+                          <div className="mb-2">
+                            <span className="text-gray-400">What I worked on:</span>
+                            <div className="text-gray-300 mt-1">{viewingDay.saas}</div>
+                          </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-4 mt-3">
+                          {viewingDay.deepWork && (
+                            <div>
+                              <span className="text-gray-400">Deep Work Hours:</span>
+                              <div className="text-amber-400 font-medium">{viewingDay.deepWork} hrs</div>
+                            </div>
+                          )}
+                          {viewingDay.talks && (
+                            <div>
+                              <span className="text-gray-400">User Talks:</span>
+                              <div className="text-blue-400 font-medium">{viewingDay.talks}</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Nutrition Section */}
+                  {viewingDay.nutritionData && (
+                    <div className="mb-4">
+                      <h3 className="font-bold mb-2">🥗 Nutrition</h3>
+                      <div className="bg-slate-700 rounded p-3 text-sm">
+                        {Object.keys(viewingDay.nutritionData).length > 0 ? (
+                          <div className="space-y-2">
+                            {Object.entries(viewingDay.nutritionData).map(([meal, items]) => (
+                              <div key={meal} className="border-b border-slate-600 pb-2">
+                                <div className="font-medium text-amber-400 capitalize mb-1">{meal}:</div>
+                                <div className="text-gray-300 text-xs space-y-1">
+                                  {items.map((item, idx) => (
+                                    <div key={idx} className="flex justify-between">
+                                      <span>{item.name}</span>
+                                      <span>{item.calories} cal</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-gray-400">No nutrition data recorded</div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -4808,10 +4883,26 @@
               </p>
               <button
                 onClick={async () => {
+                  // Include nutrition data in the snapshot
+                  const currentNutritionData = (() => {
+                    try {
+                      const savedNutrition = localStorage.getItem('vita-nutrition');
+                      if (savedNutrition) {
+                        const nutritionData = JSON.parse(savedNutrition);
+                        return nutritionData[today] || null;
+                      }
+                      return null;
+                    } catch (e) {
+                      console.error('Error loading nutrition for save:', e);
+                      return null;
+                    }
+                  })();
+
                   const currentData = {
                     ...data,
                     date: today,
-                    lastSaved: new Date().toISOString()
+                    lastSaved: new Date().toISOString(),
+                    nutritionData: currentNutritionData
                   };
                   const cleanData = JSON.parse(JSON.stringify(currentData));
                   setData(cleanData);
