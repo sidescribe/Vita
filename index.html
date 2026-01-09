@@ -83,6 +83,7 @@
         notes: ''
       });
       const [readingHistory, setReadingHistory] = useState([]);
+      const [manualWorkoutType, setManualWorkoutType] = useState(null); // Manual override for today's workout
 
       console.log('All state initialized successfully');
 
@@ -502,24 +503,24 @@
 
       async function completeWorkout() {
         const storage = makeStorage();
+        const selectedWorkoutType = manualWorkoutType || workout.type;
 
         // Validate that weights are entered for non-running workouts
-        if (workout.type !== 'running') {
-          const workoutExercises = exercises[workout.type][workout.var];
+        if (selectedWorkoutType !== 'running') {
+          const workoutExercises = exercises[selectedWorkoutType][workout.var];
           const missingWeights = workoutExercises.filter(ex => !weights[ex]);
           if (missingWeights.length > 0) {
             alert(`Please enter weights for: ${missingWeights.join(', ')}`);
             return;
           }
         }
-
-        const nd = { 
-          ...data, 
-          workoutType: workout.type, 
-          workoutDone: true, 
-          miles: (workout.type === 'running' ? miles : undefined), 
-          weights: (workout.type !== 'running' ? { ...weights } : undefined),
-          workoutExercises: (workout.type !== 'running' ? exercises[workout.type][workout.var] : undefined),
+        const nd = {
+          ...data,
+          workoutType: selectedWorkoutType,
+          workoutDone: true,
+          miles: (selectedWorkoutType === 'running' ? miles : undefined),
+          weights: (selectedWorkoutType !== 'running' ? { ...weights } : undefined),
+          workoutExercises: (selectedWorkoutType !== 'running' ? exercises[selectedWorkoutType][workout.var] : undefined),
           workoutDate: new Date().toISOString()
         };
         const cleanData = JSON.parse(JSON.stringify(nd));
@@ -564,8 +565,9 @@
       }
 
       function genNew() {
-        if (!workout || workout.type === 'running') return;
-        const vars = exercises[workout.type] || [];
+        const currentWorkoutType = manualWorkoutType || workout.type;
+        if (!workout || currentWorkoutType === 'running') return;
+        const vars = exercises[currentWorkoutType] || [];
         setWorkout({ ...workout, var: (workout.var + 1) % Math.max(1, vars.length) });
       }
 
@@ -1175,7 +1177,8 @@
       console.log('Loading complete, rendering main app');
 
       if (view === 'workouts') {
-        const ex = workout.type === 'running' ? null : exercises[workout.type][workout.var];
+        const currentWorkoutType = manualWorkoutType || workout.type;
+        const ex = currentWorkoutType === 'running' ? null : exercises[currentWorkoutType][workout.var];
         return (
           <div className="min-h-screen p-4">
             <div className="max-w-4xl mx-auto">
@@ -1187,13 +1190,40 @@
               </div>
               <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mb-6">
                 <div className="flex justify-between items-center mb-4">
-                  <div>
-                    <h2 className="text-2xl font-bold">Today: {labels[workout.type]}</h2>
-                    <p className="text-sm text-gray-400">Next: {labels[rotation[(rotation.indexOf(workout.type) + 1) % 4]]}</p>
+                  <div className="flex-1">
+                    <h2 className="text-2xl font-bold">Today: {labels[manualWorkoutType || workout.type]}</h2>
+                    <p className="text-sm text-gray-400 mb-2">
+                      {manualWorkoutType ? `🎯 Manual selection • Suggested: ${labels[workout.type]}` : `📅 Suggested • Next: ${labels[rotation[(rotation.indexOf(workout.type) + 1) % rotation.length]]}`}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={manualWorkoutType || workout.type}
+                        onChange={(e) => setManualWorkoutType(e.target.value === workout.type ? null : e.target.value)}
+                        className="px-3 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm"
+                      >
+                        <option value={workout.type}>📅 {labels[workout.type]} (Suggested)</option>
+                        {rotation.filter(type => type !== workout.type).map(type => (
+                          <option key={type} value={type}>🎯 {labels[type]}</option>
+                        ))}
+                      </select>
+                      {manualWorkoutType && (
+                        <button
+                          onClick={() => setManualWorkoutType(null)}
+                          className="px-2 py-1 bg-slate-600 text-white rounded text-xs hover:bg-slate-500"
+                          title="Reset to suggested workout"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  {workout.type !== 'running' && <button onClick={genNew} className="px-4 py-2 bg-slate-700 rounded">New Exercises</button>}
+                  <div>
+                    {(manualWorkoutType || workout.type) !== 'running' && (
+                      <button onClick={genNew} className="px-4 py-2 bg-slate-700 rounded">New Exercises</button>
+                    )}
+                  </div>
                 </div>
-                {workout.type === 'running' ? (
+                {currentWorkoutType === 'running' ? (
                   <div className="space-y-4">
                     <input type="number" step="0.1" value={miles} onChange={(e) => setMiles(e.target.value)} placeholder="Miles run" className="w-full p-3 bg-slate-700 rounded text-white" />
                     <div className="flex gap-2">
