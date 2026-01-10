@@ -4,8 +4,12 @@ const DYNAMIC_CACHE = 'vita-dynamic-v1.1.0';
 
 // Static assets to cache immediately
 const STATIC_ASSETS = [
-  '/docs/index.html',
-  '/docs/manifest.json',
+  '/Vita/docs/index.html',
+  '/Vita/docs/manifest.json',
+  '/Vita/docs/icon-192.svg',
+  '/Vita/docs/icon-512.svg',
+  '/Vita/docs/apple-touch-icon.png',
+  '/Vita/docs/sw.js',
   'https://cdn.tailwindcss.com',
   'https://unpkg.com/react@17/umd/react.development.js',
   'https://unpkg.com/react-dom@17/umd/react-dom.development.js',
