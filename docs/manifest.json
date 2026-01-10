@@ -2,12 +2,12 @@
   "name": "Vita - Personal Development Tracker",
   "short_name": "Vita",
   "description": "Your daily companion for health, productivity, and personal growth tracking",
-  "start_url": "/Vita/docs/index.html",
+  "start_url": "/Vita/",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#f59e0b",
   "orientation": "portrait",
-  "scope": "/Vita/docs/",
+  "scope": "/Vita/",
   "categories": ["productivity", "health", "fitness", "lifestyle"],
   "lang": "en-US",
   "icons": [
@@ -34,14 +34,14 @@
       "name": "Today's Tasks",
       "short_name": "Today",
       "description": "View and complete today's tasks",
-      "url": "/Vita/docs/index.html#today",
+      "url": "/Vita/#today",
       "icons": [{ "src": "icon-192.svg", "sizes": "192x192" }]
     },
     {
       "name": "Progress",
       "short_name": "Progress",
       "description": "View your progress over time",
-      "url": "/Vita/docs/index.html#progress",
+      "url": "/Vita/#progress",
       "icons": [{ "src": "icon-192.svg", "sizes": "192x192" }]
     }
   ]
