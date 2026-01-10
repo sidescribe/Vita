@@ -84,6 +84,13 @@
       });
       const [readingHistory, setReadingHistory] = useState([]);
       const [manualWorkoutType, setManualWorkoutType] = useState(null); // Manual override for today's workout
+      const [categoryAffirmations, setCategoryAffirmations] = useState({
+        productivity: '',
+        health: '',
+        leadership: '',
+        mindset: ''
+      }); // Current affirmations for each category
+      const [foodSearchTerm, setFoodSearchTerm] = useState(''); // Search term for nutrition foods
 
       console.log('All state initialized successfully');
 
@@ -303,7 +310,6 @@
           };
           try {
             localStorage.setItem('vita-workout-progress', JSON.stringify(workoutProgress));
-            console.log('Auto-saved workout progress');
           } catch (e) {
             console.error('Error saving workout progress:', e);
           }
@@ -323,7 +329,19 @@
 
             if (hoursDiff < 24 && data && !data.workoutDone) {
               setWorkout({ type: workoutProgress.type, var: workoutProgress.var });
-              setWeights(workoutProgress.weights || {});
+              // Handle backward compatibility: convert single weights to arrays if needed
+              const processedWeights = {};
+              if (workoutProgress.weights) {
+                for (const [exercise, weight] of Object.entries(workoutProgress.weights)) {
+                  if (Array.isArray(weight)) {
+                    processedWeights[exercise] = weight;
+                  } else if (weight) {
+                    // Convert single weight to array for backward compatibility
+                    processedWeights[exercise] = [weight];
+                  }
+                }
+              }
+              setWeights(processedWeights);
               setMiles(workoutProgress.miles || '');
             }
           } catch (e) {
@@ -508,9 +526,15 @@
         // Validate that weights are entered for non-running workouts
         if (selectedWorkoutType !== 'running') {
           const workoutExercises = exercises[selectedWorkoutType][workout.var];
-          const missingWeights = workoutExercises.filter(ex => !weights[ex]);
+          const missingWeights = workoutExercises.filter(ex => {
+            const exerciseWeights = weights[ex] || [];
+            const setMatch = ex.match(/(\d+)x\d+/);
+            const numSets = setMatch ? parseInt(setMatch[1]) : 1;
+            // Check if all sets have weights entered
+            return exerciseWeights.length < numSets || exerciseWeights.slice(0, numSets).some(w => !w || w === '');
+          });
           if (missingWeights.length > 0) {
-            alert(`Please enter weights for: ${missingWeights.join(', ')}`);
+            alert(`Please enter weights for all sets in: ${missingWeights.join(', ')}`);
             return;
           }
         }
@@ -1163,10 +1187,7 @@
         };
       }
 
-      console.log('Checking loading state:', { loading, data, workout });
-
       if (loading || !data || !workout) {
-        console.log('Still loading, showing loading screen');
         return (
           <div className="flex items-center justify-center h-screen">
             <div className="text-xl text-gray-300">Loading…</div>
@@ -1174,7 +1195,6 @@
         );
       }
 
-      console.log('Loading complete, rendering main app');
 
       if (view === 'workouts') {
         const currentWorkoutType = manualWorkoutType || workout.type;
@@ -1249,25 +1269,48 @@
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {ex.map((e, i) => (
-                      <div key={i} className={`bg-slate-700 rounded-lg p-4 ${data.workoutDone ? 'opacity-75' : ''}`}>
-                        <div className="font-medium mb-2 flex items-center justify-between">
-                          <span>{e}</span>
-                          {data.workoutDone && weights[e] && <span className="text-green-400 text-sm">✓ Saved</span>}
+                    {ex.map((e, i) => {
+                      // Parse set information from exercise name (e.g., "Bench Press 4x8" -> 4 sets)
+                      const setMatch = e.match(/(\d+)x\d+/);
+                      const numSets = setMatch ? parseInt(setMatch[1]) : 1;
+                      const exerciseWeights = weights[e] || [];
+
+                      return (
+                        <div key={i} className={`bg-slate-700 rounded-lg p-4 ${data.workoutDone ? 'opacity-75' : ''}`}>
+                          <div className="font-medium mb-3 flex items-center justify-between">
+                            <span>{e}</span>
+                            {data.workoutDone && exerciseWeights.length > 0 && <span className="text-green-400 text-sm">✓ Saved</span>}
+                          </div>
+
+                          <div className="space-y-2">
+                            {Array.from({ length: numSets }, (_, setIndex) => (
+                              <div key={setIndex} className="flex items-center gap-2">
+                                <span className="text-xs text-gray-400 w-12">Set {setIndex + 1}:</span>
+                                <input
+                                  type="number"
+                                  placeholder="Weight (lbs)"
+                                  value={exerciseWeights[setIndex] || ''}
+                                  onChange={(ev) => {
+                                    const newWeights = [...exerciseWeights];
+                                    newWeights[setIndex] = ev.target.value;
+                                    setWeights({...weights, [e]: newWeights});
+                                  }}
+                                  className={`flex-1 p-2 bg-slate-600 rounded text-sm text-white ${data.workoutDone ? 'cursor-not-allowed' : ''}`}
+                                  disabled={data.workoutDone}
+                                />
+                                <span className="text-xs text-gray-500">lbs</span>
+                              </div>
+                            ))}
+                          </div>
+
+                          {data.workoutDone && exerciseWeights.length > 0 && (
+                            <div className="mt-2 text-xs text-gray-400">
+                              Previous: {exerciseWeights.join(', ')} lbs
+                            </div>
+                          )}
                         </div>
-                        <input
-                          type="number"
-                          placeholder="Weight (lbs)"
-                          value={weights[e] || ''}
-                          onChange={(ev) => setWeights({...weights, [e]: ev.target.value})}
-                          className={`w-full p-2 bg-slate-600 rounded text-sm text-white ${data.workoutDone ? 'cursor-not-allowed' : ''}`}
-                          disabled={data.workoutDone}
-                        />
-                        {data.workoutDone && weights[e] && (
-                          <p className="text-xs text-gray-400 mt-1">Previous: {weights[e]} lbs</p>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                     <div className="flex gap-2">
                       <button
                         onClick={async () => {
@@ -1363,25 +1406,35 @@
           ]
         };
 
-        // Get today's affirmation based on user's recent focus
+        // Get today's affirmation based on user's recent focus with improved randomization
         const getTodaysAffirmation = () => {
-          const today = new Date();
-          const seed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
-
           // Check recent activity to personalize
-          const recentTasks = history.slice(0, 3).flatMap(d => d.done || []);
+          const recentTasks = history.slice(0, 7).flatMap(d => d.done || []);
           const hasProductivity = recentTasks.some(t => ['deep', 'progress', 'priorities'].includes(t));
           const hasLeadership = recentTasks.some(t => ['hard', 'own', 'help'].includes(t));
-          const hasWorkout = history.slice(0, 3).some(d => d.workoutDone);
+          const hasWorkout = history.slice(0, 7).some(d => d.workoutDone);
 
-          let category = 'general';
-          if (hasProductivity && hasLeadership) category = 'leadership';
-          else if (hasProductivity) category = 'productivity';
-          else if (hasWorkout) category = 'health';
-          else if (Math.random() > 0.7) category = 'mindset';
+          // Determine primary category based on activity
+          let primaryCategory = 'general';
+          if (hasProductivity && hasLeadership) primaryCategory = 'leadership';
+          else if (hasProductivity) primaryCategory = 'productivity';
+          else if (hasWorkout) primaryCategory = 'health';
 
-          const categoryAffirmations = affirmations[category];
-          return categoryAffirmations[seed % categoryAffirmations.length];
+          // Add weekly rotation for variety - each week focuses on different category
+          const weekOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24 * 7));
+          const weekCategories = ['productivity', 'health', 'leadership', 'mindset'];
+          const weeklyCategory = weekCategories[weekOfYear % 4];
+
+          // Use activity-based category 70% of time, weekly rotation 30% of time
+          const category = Math.random() > 0.3 ? primaryCategory : weeklyCategory;
+
+          // Create more random seed using multiple factors
+          const userActivitySeed = (history.length * 7) + (recentTasks.length * 3) + (data.done ? data.done.length : 0);
+          const timeSeed = Date.now() % 1000;
+          const combinedSeed = userActivitySeed + timeSeed + Math.floor(Math.random() * 100);
+
+          const categoryAffirmations = affirmations[category] || affirmations.general;
+          return categoryAffirmations[combinedSeed % categoryAffirmations.length];
         };
 
         const todaysAffirmation = getTodaysAffirmation();
@@ -1402,67 +1455,139 @@
               </div>
 
               {/* Today's Main Affirmation */}
-              <div className="bg-slate-800 rounded-xl p-8 mb-6 border border-slate-700 text-center">
-                <div className="mb-4">
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    affirmationCategory === 'productivity' ? 'bg-blue-600' :
-                    affirmationCategory === 'health' ? 'bg-green-600' :
-                    affirmationCategory === 'leadership' ? 'bg-purple-600' :
-                    affirmationCategory === 'mindset' ? 'bg-yellow-600' :
-                    'bg-amber-600'
-                  } text-white`}>
-                    {affirmationCategory.charAt(0).toUpperCase() + affirmationCategory.slice(1)}
-                  </span>
+              <div className="mb-8">
+                <div className="flex items-center justify-center mb-4">
+                  <div className="h-px bg-gradient-to-r from-transparent via-slate-600 to-transparent flex-1"></div>
+                  <span className="px-4 text-sm font-medium text-slate-400 bg-slate-900">🎯 TODAY'S FOCUS</span>
+                  <div className="h-px bg-gradient-to-r from-transparent via-slate-600 to-transparent flex-1"></div>
                 </div>
-                <h2 className="text-2xl md:text-3xl font-bold text-white mb-4 leading-relaxed">
-                  "{todaysAffirmation}"
-                </h2>
-                <p className="text-gray-400 text-sm">Your affirmation for {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+                <p className="text-center text-slate-500 text-sm mb-4">Your personalized daily affirmation based on recent activity</p>
+
+                <div className="bg-slate-800 rounded-xl p-8 border border-slate-700 text-center">
+                  <div className="mb-4">
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      affirmationCategory === 'productivity' ? 'bg-blue-600' :
+                      affirmationCategory === 'health' ? 'bg-green-600' :
+                      affirmationCategory === 'leadership' ? 'bg-purple-600' :
+                      affirmationCategory === 'mindset' ? 'bg-yellow-600' :
+                      'bg-amber-600'
+                    } text-white`}>
+                      {affirmationCategory.charAt(0).toUpperCase() + affirmationCategory.slice(1)}
+                    </span>
+                  </div>
+                  <h2 className="text-2xl md:text-3xl font-bold text-white mb-4 leading-relaxed">
+                    "{todaysAffirmation}"
+                  </h2>
+                  <p className="text-gray-400 text-sm">Your affirmation for {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+                </div>
               </div>
 
               {/* Quick Affirmation Categories */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-                  <h3 className="text-lg font-bold mb-3 text-blue-400">💼 Productivity</h3>
-                  <p className="text-sm text-gray-300 mb-3">{affirmations.productivity[Math.floor(Math.random() * affirmations.productivity.length)]}</p>
-                  <button className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
-                    Get New One
-                  </button>
+              <div className="mb-8">
+                <div className="flex items-center justify-center mb-4">
+                  <div className="h-px bg-gradient-to-r from-transparent via-slate-600 to-transparent flex-1"></div>
+                  <span className="px-4 text-sm font-medium text-slate-400 bg-slate-900">🎲 EXPLORE CATEGORIES</span>
+                  <div className="h-px bg-gradient-to-r from-transparent via-slate-600 to-transparent flex-1"></div>
                 </div>
+                <p className="text-center text-slate-500 text-sm mb-6">Try affirmations from different life areas for variety and inspiration</p>
 
-                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-                  <h3 className="text-lg font-bold mb-3 text-green-400">💪 Health & Fitness</h3>
-                  <p className="text-sm text-gray-300 mb-3">{affirmations.health[Math.floor(Math.random() * affirmations.health.length)]}</p>
-                  <button className="w-full py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors">
-                    Get New One
-                  </button>
-                </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                      <h3 className="text-lg font-bold mb-2 text-blue-400">💼 Productivity</h3>
+                      <p className="text-xs text-slate-500 mb-3">Focus on work efficiency and goal achievement</p>
+                      <p className="text-sm text-gray-300 mb-4 min-h-[3rem]">{categoryAffirmations.productivity || affirmations.productivity[Math.floor(Math.random() * affirmations.productivity.length)]}</p>
+                      <button
+                        onClick={() => setCategoryAffirmations(prev => ({
+                          ...prev,
+                          productivity: affirmations.productivity[Math.floor(Math.random() * affirmations.productivity.length)]
+                        }))}
+                        className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+                      >
+                        Get New One
+                      </button>
+                    </div>
 
-                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-                  <h3 className="text-lg font-bold mb-3 text-purple-400">👑 Leadership</h3>
-                  <p className="text-sm text-gray-300 mb-3">{affirmations.leadership[Math.floor(Math.random() * affirmations.leadership.length)]}</p>
-                  <button className="w-full py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 transition-colors">
-                    Get New One
-                  </button>
-                </div>
+                    <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                      <h3 className="text-lg font-bold mb-2 text-green-400">💪 Health & Fitness</h3>
+                      <p className="text-xs text-slate-500 mb-3">Build strength, energy, and wellness habits</p>
+                      <p className="text-sm text-gray-300 mb-4 min-h-[3rem]">{categoryAffirmations.health || affirmations.health[Math.floor(Math.random() * affirmations.health.length)]}</p>
+                      <button
+                        onClick={() => setCategoryAffirmations(prev => ({
+                          ...prev,
+                          health: affirmations.health[Math.floor(Math.random() * affirmations.health.length)]
+                        }))}
+                        className="w-full py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors"
+                      >
+                        Get New One
+                      </button>
+                    </div>
 
-                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-                  <h3 className="text-lg font-bold mb-3 text-yellow-400">🧠 Mindset</h3>
-                  <p className="text-sm text-gray-300 mb-3">{affirmations.mindset[Math.floor(Math.random() * affirmations.mindset.length)]}</p>
-                  <button className="w-full py-2 bg-yellow-600 text-white rounded-lg text-sm hover:bg-yellow-700 transition-colors">
-                    Get New One
-                  </button>
+                    <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                      <h3 className="text-lg font-bold mb-2 text-purple-400">👑 Leadership</h3>
+                      <p className="text-xs text-slate-500 mb-3">Develop influence, communication, and impact</p>
+                      <p className="text-sm text-gray-300 mb-4 min-h-[3rem]">{categoryAffirmations.leadership || affirmations.leadership[Math.floor(Math.random() * affirmations.leadership.length)]}</p>
+                      <button
+                        onClick={() => setCategoryAffirmations(prev => ({
+                          ...prev,
+                          leadership: affirmations.leadership[Math.floor(Math.random() * affirmations.leadership.length)]
+                        }))}
+                        className="w-full py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 transition-colors"
+                      >
+                        Get New One
+                      </button>
+                    </div>
+
+                    <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                      <h3 className="text-lg font-bold mb-2 text-yellow-400">🧠 Mindset</h3>
+                      <p className="text-xs text-slate-500 mb-3">Cultivate positive thinking and growth orientation</p>
+                      <p className="text-sm text-gray-300 mb-4 min-h-[3rem]">{categoryAffirmations.mindset || affirmations.mindset[Math.floor(Math.random() * affirmations.mindset.length)]}</p>
+                      <button
+                        onClick={() => setCategoryAffirmations(prev => ({
+                          ...prev,
+                          mindset: affirmations.mindset[Math.floor(Math.random() * affirmations.mindset.length)]
+                        }))}
+                        className="w-full py-2 bg-yellow-600 text-white rounded-lg text-sm hover:bg-yellow-700 transition-colors"
+                      >
+                        Get New One
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
 
               {/* Inspiration Section */}
-              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-                <h3 className="text-lg font-bold mb-3">💡 Daily Inspiration</h3>
-                <div className="space-y-3 text-sm text-gray-300">
-                  <p><strong>Remember:</strong> Every expert was once a beginner. Every champion was once afraid to start.</p>
-                  <p><strong>Action:</strong> The bridge between your goals and accomplishment is your daily actions.</p>
-                  <p><strong>Growth:</strong> You're not competing with anyone else. You're competing with who you were yesterday.</p>
-                  <p><strong>Resilience:</strong> The only way to fail is to stop trying. Every setback is a setup for a comeback.</p>
+              <div className="mb-8">
+                <div className="flex items-center justify-center mb-4">
+                  <div className="h-px bg-gradient-to-r from-transparent via-slate-600 to-transparent flex-1"></div>
+                  <span className="px-4 text-sm font-medium text-slate-400 bg-slate-900">💡 DAILY INSPIRATION</span>
+                  <div className="h-px bg-gradient-to-r from-transparent via-slate-600 to-transparent flex-1"></div>
+                </div>
+                <p className="text-center text-slate-500 text-sm mb-6">Quick motivational reminders for your journey</p>
+
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                  <div className="space-y-4 text-sm text-gray-300">
+                    <p><strong>🌟 Remember:</strong> Every expert was once a beginner. Every champion was once afraid to start.</p>
+                    <p><strong>⚡ Action:</strong> The bridge between your goals and accomplishment is your daily actions.</p>
+                    <p><strong>📈 Growth:</strong> You're not competing with anyone else. You're competing with who you were yesterday.</p>
+                    <p><strong>💪 Resilience:</strong> The only way to fail is to stop trying. Every setback is a setup for a comeback.</p>
+                  </div>
+
+                  <div className="mt-6 pt-4 border-t border-slate-700">
+                    <button
+                      onClick={() => {
+                        const allAffirmations = [
+                          ...affirmations.productivity,
+                          ...affirmations.health,
+                          ...affirmations.leadership,
+                          ...affirmations.mindset
+                        ];
+                        const randomAffirmation = allAffirmations[Math.floor(Math.random() * allAffirmations.length)];
+                        alert(`🎲 Surprise Affirmation:\n\n"${randomAffirmation}"`);
+                      }}
+                      className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg text-sm font-medium hover:from-purple-700 hover:to-pink-700 transition-all duration-200 shadow-lg"
+                    >
+                      🎲 Surprise Me - Random Affirmation
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2412,43 +2537,89 @@
       }
 
       if (view === 'nutrition') {
-        console.log('Nutrition view loaded');
 
         // Expanded food database with 80+ foods
         const foodDatabase = {
           proteins: [
+            // Poultry
             { name: "Chicken Breast (4oz)", calories: 165, protein: 31, carbs: 0, fat: 3.6 },
             { name: "Chicken Thigh (4oz)", calories: 203, protein: 25, carbs: 0, fat: 11 },
-            { name: "Salmon (4oz)", calories: 206, protein: 22, carbs: 0, fat: 12 },
-            { name: "Tilapia (4oz)", calories: 128, protein: 26, carbs: 0, fat: 3 },
-            { name: "Shrimp (4oz)", calories: 120, protein: 24, carbs: 1, fat: 2 },
-            { name: "Greek Yogurt (plain, 6oz)", calories: 100, protein: 18, carbs: 6, fat: 0 },
-            { name: "Greek Yogurt (vanilla, 6oz)", calories: 120, protein: 18, carbs: 12, fat: 1 },
-            { name: "Eggs (2 large)", calories: 143, protein: 13, carbs: 1, fat: 10 },
-            { name: "Egg Whites (4 large)", calories: 68, protein: 14, carbs: 1, fat: 0 },
-            { name: "Tuna (canned, 4oz)", calories: 100, protein: 22, carbs: 0, fat: 1 },
+            { name: "Chicken Wings (3oz)", calories: 203, protein: 20, carbs: 0, fat: 14 },
             { name: "Turkey Breast (4oz)", calories: 135, protein: 30, carbs: 0, fat: 1 },
             { name: "Turkey Ground (4oz)", calories: 170, protein: 22, carbs: 0, fat: 8 },
+            { name: "Duck Breast (4oz)", calories: 190, protein: 25, carbs: 0, fat: 9 },
+
+            // Fish & Seafood
+            { name: "Salmon (4oz)", calories: 206, protein: 22, carbs: 0, fat: 12 },
+            { name: "Tilapia (4oz)", calories: 128, protein: 26, carbs: 0, fat: 3 },
+            { name: "Tuna (canned, 4oz)", calories: 100, protein: 22, carbs: 0, fat: 1 },
+            { name: "Tuna (fresh, 4oz)", calories: 130, protein: 28, carbs: 0, fat: 1 },
+            { name: "Shrimp (4oz)", calories: 120, protein: 24, carbs: 1, fat: 2 },
+            { name: "Cod (4oz)", calories: 105, protein: 23, carbs: 0, fat: 1 },
+            { name: "Halibut (4oz)", calories: 119, protein: 23, carbs: 0, fat: 3 },
+            { name: "Mahi Mahi (4oz)", calories: 109, protein: 23, carbs: 0, fat: 1 },
+
+            // Beef & Pork
             { name: "Beef (lean, 4oz)", calories: 170, protein: 26, carbs: 0, fat: 7 },
             { name: "Beef (ground, 4oz)", calories: 217, protein: 20, carbs: 0, fat: 15 },
+            { name: "Beef Steak (sirloin, 4oz)", calories: 190, protein: 26, carbs: 0, fat: 9 },
+            { name: "Pork Tenderloin (4oz)", calories: 143, protein: 26, carbs: 0, fat: 3 },
+            { name: "Pork Chops (4oz)", calories: 193, protein: 25, carbs: 0, fat: 9 },
+            { name: "Bacon (2 slices)", calories: 87, protein: 6, carbs: 0, fat: 7 },
+
+            // Eggs & Dairy
+            { name: "Eggs (2 large)", calories: 143, protein: 13, carbs: 1, fat: 10 },
+            { name: "Egg Whites (4 large)", calories: 68, protein: 14, carbs: 1, fat: 0 },
+            { name: "Greek Yogurt (plain, 6oz)", calories: 100, protein: 18, carbs: 6, fat: 0 },
+            { name: "Greek Yogurt (vanilla, 6oz)", calories: 120, protein: 18, carbs: 12, fat: 1 },
             { name: "Cottage Cheese (4oz)", calories: 110, protein: 13, carbs: 3, fat: 5 },
+
+            // Plant-Based Proteins
             { name: "Tofu (4oz)", calories: 94, protein: 10, carbs: 2, fat: 6 },
             { name: "Tempeh (4oz)", calories: 193, protein: 19, carbs: 9, fat: 11 },
+            { name: "Edamame (1 cup)", calories: 120, protein: 11, carbs: 10, fat: 5 },
+            { name: "Seitan (4oz)", calories: 190, protein: 25, carbs: 8, fat: 2 },
+
+            // Beans & Legumes
             { name: "Lentils (1 cup cooked)", calories: 230, protein: 18, carbs: 40, fat: 1 },
             { name: "Black Beans (1 cup cooked)", calories: 227, protein: 15, carbs: 41, fat: 1 },
-            { name: "Chickpeas (1 cup cooked)", calories: 269, protein: 15, carbs: 45, fat: 4 }
+            { name: "Chickpeas (1 cup cooked)", calories: 269, protein: 15, carbs: 45, fat: 4 },
+            { name: "Kidney Beans (1 cup cooked)", calories: 225, protein: 15, carbs: 40, fat: 1 },
+            { name: "Pinto Beans (1 cup cooked)", calories: 245, protein: 15, carbs: 45, fat: 1 },
+            { name: "Peanut Butter (2 tbsp)", calories: 188, protein: 8, carbs: 6, fat: 16 },
+            { name: "Almonds (1oz)", calories: 164, protein: 6, carbs: 6, fat: 14 },
+            { name: "Walnuts (1oz)", calories: 185, protein: 4, carbs: 4, fat: 18 }
           ],
           carbs: [
+            // Grains & Cereals
             { name: "Brown Rice (1 cup cooked)", calories: 216, protein: 5, carbs: 44, fat: 2 },
             { name: "White Rice (1 cup cooked)", calories: 205, protein: 4, carbs: 44, fat: 0 },
             { name: "Quinoa (1 cup cooked)", calories: 222, protein: 8, carbs: 39, fat: 4 },
             { name: "Oatmeal (1 cup cooked)", calories: 147, protein: 5, carbs: 27, fat: 3 },
             { name: "Whole Wheat Pasta (1 cup cooked)", calories: 174, protein: 7, carbs: 37, fat: 1 },
-            { name: "Sweet Potato (medium)", calories: 103, protein: 2, carbs: 24, fat: 0 },
-            { name: "White Potato (medium)", calories: 161, protein: 4, carbs: 37, fat: 0 },
+            { name: "White Pasta (1 cup cooked)", calories: 157, protein: 6, carbs: 31, fat: 1 },
+            { name: "Barley (1 cup cooked)", calories: 193, protein: 4, carbs: 44, fat: 1 },
+            { name: "Farro (1 cup cooked)", calories: 185, protein: 7, carbs: 37, fat: 1 },
+            { name: "Couscous (1 cup cooked)", calories: 176, protein: 6, carbs: 36, fat: 0 },
+            { name: "Bulgur (1 cup cooked)", calories: 151, protein: 6, carbs: 34, fat: 0 },
+
+            // Bread & Bakery
             { name: "Whole Wheat Bread (2 slices)", calories: 140, protein: 6, carbs: 24, fat: 2 },
             { name: "White Bread (2 slices)", calories: 133, protein: 4, carbs: 26, fat: 1 },
             { name: "Bagel (medium)", calories: 289, protein: 11, carbs: 56, fat: 2 },
+            { name: "English Muffin", calories: 134, protein: 5, carbs: 27, fat: 1 },
+            { name: "Pita Bread (small)", calories: 165, protein: 6, carbs: 33, fat: 1 },
+            { name: "Tortilla (medium flour)", calories: 146, protein: 4, carbs: 24, fat: 4 },
+            { name: "Tortilla (medium corn)", calories: 52, protein: 1, carbs: 11, fat: 1 },
+
+            // Potatoes & Root Vegetables
+            { name: "Sweet Potato (medium)", calories: 103, protein: 2, carbs: 24, fat: 0 },
+            { name: "White Potato (medium)", calories: 161, protein: 4, carbs: 37, fat: 0 },
+            { name: "Baked Potato (medium)", calories: 161, protein: 4, carbs: 37, fat: 0 },
+            { name: "Corn (1 cup)", calories: 132, protein: 5, carbs: 29, fat: 2 },
+            { name: "Peas (1 cup cooked)", calories: 134, protein: 9, carbs: 25, fat: 1 },
+
+            // Fruits
             { name: "Banana", calories: 105, protein: 1, carbs: 27, fat: 0 },
             { name: "Apple", calories: 95, protein: 0, carbs: 25, fat: 0 },
             { name: "Orange", calories: 62, protein: 1, carbs: 15, fat: 0 },
@@ -2456,9 +2627,9 @@
             { name: "Blueberries (1 cup)", calories: 84, protein: 1, carbs: 21, fat: 0 },
             { name: "Grapes (1 cup)", calories: 104, protein: 1, carbs: 27, fat: 0 },
             { name: "Pineapple (1 cup)", calories: 82, protein: 1, carbs: 22, fat: 0 },
-            { name: "Avocado (1/2 medium)", calories: 120, protein: 1, carbs: 6, fat: 11 },
-            { name: "Corn (1 cup)", calories: 132, protein: 5, carbs: 29, fat: 2 },
-            { name: "Peas (1 cup cooked)", calories: 134, protein: 9, carbs: 25, fat: 1 }
+            { name: "Mango (1 cup)", calories: 99, protein: 1, carbs: 25, fat: 1 },
+            { name: "Kiwi", calories: 46, protein: 1, carbs: 11, fat: 0 },
+            { name: "Pear", calories: 101, protein: 1, carbs: 27, fat: 0 }
           ],
           vegetables: [
             { name: "Broccoli (1 cup)", calories: 31, protein: 3, carbs: 6, fat: 0 },
@@ -2540,7 +2711,7 @@
           ]
         };
 
-        // State management (already declared at component level)
+        // State management for nutrition features
 
         const todayKey = getTodayLocal();
         const todaysMeals = (nutritionData && nutritionData[todayKey]) ? nutritionData[todayKey] : {
@@ -2587,7 +2758,14 @@
           localStorage.setItem('vita-nutrition', JSON.stringify(updatedNutrition));
         };
 
-        console.log('About to return nutrition JSX', todaysMeals, dailyTotals);
+        // Filter foods based on search term
+        const filterFoods = (foods) => {
+          if (!foodSearchTerm.trim()) return foods;
+          return foods.filter(food =>
+            food.name.toLowerCase().includes(foodSearchTerm.toLowerCase())
+          );
+        };
+
 
         return (
           <div className="min-h-screen p-4">
@@ -2704,29 +2882,55 @@
                       </select>
                     </div>
 
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium mb-2">Search Foods</label>
+                      <input
+                        type="text"
+                        value={foodSearchTerm}
+                        onChange={(e) => setFoodSearchTerm(e.target.value)}
+                        placeholder="Search for foods..."
+                        className="w-full p-2 bg-slate-700 rounded text-white placeholder-gray-400"
+                      />
+                      {foodSearchTerm && (
+                        <button
+                          onClick={() => setFoodSearchTerm('')}
+                          className="text-xs text-gray-400 hover:text-white mt-1"
+                        >
+                          Clear search
+                        </button>
+                      )}
+                    </div>
+
                     <div className="space-y-4 max-h-80 overflow-y-auto">
-                      {Object.entries(foodDatabase).map(([category, foods]) => (
-                        <div key={category}>
-                          <h4 className="font-medium capitalize mb-2 text-amber-400">{category} ({foods.length})</h4>
-                          <div className="space-y-1">
-                            {foods.map((food, index) => (
-                              <button
-                                key={index}
-                                onClick={() => addFood(food)}
-                                className="w-full text-left p-2 bg-slate-700 rounded hover:bg-slate-600 transition-colors"
-                              >
-                                <div className="flex justify-between">
-                                  <span className="text-sm font-medium">{food.name}</span>
-                                  <span className="text-sm text-amber-400">{food.calories} cal</span>
-                                </div>
-                                <div className="text-xs text-gray-400 mt-1">
-                                  P:{food.protein}g • C:{food.carbs}g • F:{food.fat}g
-                                </div>
-                              </button>
-                            ))}
+                      {Object.entries(foodDatabase).map(([category, foods]) => {
+                        const filteredFoods = filterFoods(foods);
+                        if (filteredFoods.length === 0) return null;
+
+                        return (
+                          <div key={category}>
+                            <h4 className="font-medium capitalize mb-2 text-amber-400">
+                              {category} ({filteredFoods.length}{foodSearchTerm ? ` of ${foods.length}` : ''})
+                            </h4>
+                            <div className="space-y-1">
+                              {filteredFoods.map((food, index) => (
+                                <button
+                                  key={`${category}-${index}`}
+                                  onClick={() => addFood(food)}
+                                  className="w-full text-left p-2 bg-slate-700 rounded hover:bg-slate-600 transition-colors"
+                                >
+                                  <div className="flex justify-between">
+                                    <span className="text-sm font-medium">{food.name}</span>
+                                    <span className="text-sm text-amber-400">{food.calories} cal</span>
+                                  </div>
+                                  <div className="text-xs text-gray-400 mt-1">
+                                    P:{food.protein}g • C:{food.carbs}g • F:{food.fat}g
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      }).filter(Boolean)}
                     </div>
                   </div>
                 </div>
@@ -4932,15 +5136,23 @@
                       {viewingDay.workoutDone && viewingDay.workoutExercises && viewingDay.workoutExercises.length > 0 && (
                         <div className="mt-3">
                           <p className="text-xs text-gray-400 mb-2">Exercises Completed:</p>
-                          <div className="space-y-1">
-                            {viewingDay.workoutExercises.map((exercise, idx) => (
-                              <div key={idx} className="flex justify-between text-sm">
-                                <span className="text-gray-300">{exercise}</span>
-                                {viewingDay.weights && viewingDay.weights[exercise] && (
-                                  <span className="text-amber-400 font-medium">{viewingDay.weights[exercise]} lbs</span>
-                                )}
-                              </div>
-                            ))}
+                          <div className="space-y-2">
+                            {viewingDay.workoutExercises.map((exercise, idx) => {
+                              const exerciseWeights = viewingDay.weights[exercise];
+                              return (
+                                <div key={idx} className="text-sm">
+                                  <div className="text-gray-300 mb-1">{exercise}</div>
+                                  {exerciseWeights && (
+                                    <div className="ml-2 text-xs text-amber-400">
+                                      {Array.isArray(exerciseWeights)
+                                        ? exerciseWeights.map((weight, setIdx) => `${weight} lbs`).join(', ')
+                                        : `${exerciseWeights} lbs`
+                                      }
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
