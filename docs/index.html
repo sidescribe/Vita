@@ -3,8 +3,24 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Vita — Simple Tracker</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1.0,user-scalable=no" />
+
+  <!-- PWA Meta Tags -->
+  <meta name="description" content="Your daily companion for health, productivity, and personal growth tracking" />
+  <meta name="theme-color" content="#f59e0b" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Vita" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="format-detection" content="telephone=no" />
+
+  <!-- PWA Manifest and Icons -->
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="icon" href="icon-192.svg" type="image/svg+xml" />
+  <link rel="icon" href="favicon.ico" type="image/x-icon" />
+
+  <title>Vita — Personal Development Tracker</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
@@ -91,6 +107,7 @@
         mindset: ''
       }); // Current affirmations for each category
       const [foodSearchTerm, setFoodSearchTerm] = useState(''); // Search term for nutrition foods
+      const [showDataModal, setShowDataModal] = useState(false); // Data management modal
 
       console.log('All state initialized successfully');
 
@@ -211,6 +228,61 @@
             console.error('Error loading nutrition data:', e);
           }
         }
+      }, []);
+
+      // Backup reminder check
+      useEffect(() => {
+        const checkBackupReminder = () => {
+          const lastBackup = localStorage.getItem('vita-last-backup');
+          const daysSinceBackup = lastBackup ?
+            Math.floor((Date.now() - new Date(lastBackup).getTime()) / (1000 * 60 * 60 * 24)) : 999;
+
+          if (daysSinceBackup > 7) {
+            // Show reminder after a delay to not be intrusive
+            setTimeout(() => {
+              if (confirm(`It's been ${daysSinceBackup} days since your last Vita backup. Would you like to export your data now to prevent data loss?`)) {
+                const exportData = () => {
+                  const exportData = {
+                    version: '1.1.0',
+                    timestamp: new Date().toISOString(),
+                    app: 'Vita - Personal Development Tracker',
+                    data: {
+                      history,
+                      nutritionData,
+                      knowledgeBase,
+                      spacedRepetition,
+                      currentBookApplication,
+                      challenges,
+                      completedChallenges,
+                      badges,
+                      aiCoachInsights,
+                      readingProgress,
+                      readingHistory
+                    }
+                  };
+
+                  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `vita-backup-${new Date().toISOString().split('T')[0]}.json`;
+                  a.click();
+                  URL.createObjectURL(url);
+
+                  // Update last backup timestamp
+                  localStorage.setItem('vita-last-backup', new Date().toISOString());
+                };
+                exportData();
+              }
+            }, 3000); // 3 second delay
+          }
+        };
+
+        // Check on component mount and periodically
+        checkBackupReminder();
+        const interval = setInterval(checkBackupReminder, 24 * 60 * 60 * 1000); // Daily check
+
+        return () => clearInterval(interval);
       }, []);
 
       // Load knowledge data on component mount
@@ -2766,6 +2838,106 @@
           );
         };
 
+        // Data export functionality
+        const exportData = () => {
+          const exportData = {
+            version: '1.1.0',
+            timestamp: new Date().toISOString(),
+            app: 'Vita - Personal Development Tracker',
+            data: {
+              history,
+              nutritionData,
+              knowledgeBase,
+              spacedRepetition,
+              currentBookApplication,
+              challenges,
+              completedChallenges,
+              badges,
+              aiCoachInsights,
+              readingProgress,
+              readingHistory
+            }
+          };
+
+          const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `vita-backup-${new Date().toISOString().split('T')[0]}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+
+          // Update last backup timestamp
+          localStorage.setItem('vita-last-backup', new Date().toISOString());
+
+          alert('✅ Data exported successfully! File downloaded to your device.');
+        };
+
+        // Data import functionality
+        const importData = (event) => {
+          const file = event.target.files[0];
+          if (!file) return;
+
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              const importedData = JSON.parse(e.target.result);
+
+              // Validate data structure
+              if (!importedData.data || !importedData.app || importedData.app !== 'Vita - Personal Development Tracker') {
+                alert('❌ Invalid backup file format. Please select a valid Vita backup file.');
+                return;
+              }
+
+              if (!confirm('⚠️ This will replace all your current data. Are you sure you want to continue?')) {
+                return;
+              }
+
+              // Import data
+              const data = importedData.data;
+
+              // Save to localStorage
+              if (data.history) localStorage.setItem('vita-history', JSON.stringify(data.history));
+              if (data.nutritionData) localStorage.setItem('vita-nutrition', JSON.stringify(data.nutritionData));
+              if (data.knowledgeBase) localStorage.setItem('vita-knowledge-base', JSON.stringify(data.knowledgeBase));
+              if (data.spacedRepetition) localStorage.setItem('vita-spaced-repetition', JSON.stringify(data.spacedRepetition));
+              if (data.challenges) localStorage.setItem('vita-challenges', JSON.stringify(data.challenges));
+              if (data.completedChallenges) localStorage.setItem('vita-completed-challenges', JSON.stringify(data.completedChallenges));
+              if (data.badges) localStorage.setItem('vita-badges', JSON.stringify(data.badges));
+              if (data.aiCoachInsights) localStorage.setItem('vita-ai-insights', JSON.stringify(data.aiCoachInsights));
+              if (data.readingProgress) localStorage.setItem('vita-reading-progress', JSON.stringify(data.readingProgress));
+              if (data.readingHistory) localStorage.setItem('vita-reading-history', JSON.stringify(data.readingHistory));
+
+              alert('✅ Data imported successfully! Refreshing the app...');
+              window.location.reload();
+
+            } catch (error) {
+              alert('❌ Error importing data. Please check the file format and try again.');
+              console.error('Import error:', error);
+            }
+          };
+          reader.readAsText(file);
+        };
+
+        // Data integrity check
+        const validateDataIntegrity = () => {
+          const requiredKeys = [
+            'vita-history',
+            'vita-nutrition',
+            'vita-knowledge-base',
+            'vita-challenges',
+            'vita-badges'
+          ];
+
+          const missingKeys = requiredKeys.filter(key => !localStorage.getItem(key));
+          if (missingKeys.length > 0) {
+            console.warn('Missing data keys:', missingKeys);
+            // Could show a warning notification to user
+          }
+
+          return missingKeys.length === 0;
+        };
+
 
         return (
           <div className="min-h-screen p-4">
@@ -2779,6 +2951,7 @@
                 <button onClick={() => setView('affirmations')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Affirmations</button>
                 <button onClick={() => setView('coach')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Coach</button>
                 <button onClick={() => setView('books')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Books</button>
+                <button onClick={() => setView('data')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Data</button>
                 <button onClick={() => setView('nutrition')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Nutrition</button>
                 <button onClick={() => setView('intelligence')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Intelligence</button>
                 <button onClick={() => setView('wellness')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Wellness</button>
@@ -5274,6 +5447,162 @@
         );
       }
 
+      if (view === 'data') {
+        // Data integrity check
+        validateDataIntegrity();
+
+        // Check last backup
+        const lastBackup = localStorage.getItem('vita-last-backup');
+        const daysSinceBackup = lastBackup ?
+          Math.floor((Date.now() - new Date(lastBackup).getTime()) / (1000 * 60 * 60 * 24)) : 999;
+
+        return (
+          <div className="min-h-screen p-4">
+            <div className="max-w-4xl mx-auto">
+              <h1 className="text-4xl font-bold mb-4 text-center">Vita</h1>
+              <div className="flex gap-2 justify-center mb-6 flex-wrap">
+                <button onClick={() => setView('today')} className="px-4 py-2 bg-slate-700 text-gray-300 rounded-lg text-sm">Today</button>
+                <button onClick={() => setView('progress')} className="px-4 py-2 bg-slate-700 text-gray-300 rounded-lg text-sm">Progress</button>
+                <button onClick={() => setView('workouts')} className="px-4 py-2 bg-slate-700 text-gray-300 rounded-lg text-sm">Workouts</button>
+                <button onClick={() => setView('affirmations')} className="px-4 py-2 bg-slate-700 text-gray-300 rounded-lg text-sm">Affirmations</button>
+                <button onClick={() => setView('coach')} className="px-4 py-2 bg-slate-700 text-gray-300 rounded-lg text-sm">Coach</button>
+                <button onClick={() => setView('books')} className="px-4 py-2 bg-slate-700 text-gray-300 rounded-lg text-sm">Books</button>
+                <button onClick={() => setView('data')} className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm">Data</button>
+              </div>
+
+              {/* Data Management Header */}
+              <div className="mb-6">
+                <div className="flex items-center justify-center mb-4">
+                  <div className="h-px bg-gradient-to-r from-transparent via-slate-600 to-transparent flex-1"></div>
+                  <span className="px-4 text-sm font-medium text-slate-400 bg-slate-900">💾 DATA MANAGEMENT</span>
+                  <div className="h-px bg-gradient-to-r from-transparent via-slate-600 to-transparent flex-1"></div>
+                </div>
+                <p className="text-center text-slate-500 text-sm mb-6">Backup, restore, and manage your personal data</p>
+              </div>
+
+              {/* Data Statistics */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 text-center">
+                  <div className="text-2xl mb-2">📊</div>
+                  <div className="text-lg font-bold text-blue-400">{history.length}</div>
+                  <div className="text-sm text-gray-400">Days Tracked</div>
+                </div>
+                <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 text-center">
+                  <div className="text-2xl mb-2">📚</div>
+                  <div className="text-lg font-bold text-green-400">{knowledgeBase.length}</div>
+                  <div className="text-sm text-gray-400">Knowledge Items</div>
+                </div>
+                <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 text-center">
+                  <div className="text-2xl mb-2">🏆</div>
+                  <div className="text-lg font-bold text-purple-400">{badges.length}</div>
+                  <div className="text-sm text-gray-400">Achievements</div>
+                </div>
+              </div>
+
+              {/* Backup Status */}
+              {daysSinceBackup > 7 && (
+                <div className="bg-yellow-900 border border-yellow-600 rounded-xl p-4 mb-6">
+                  <div className="flex items-center gap-3">
+                    <span className="text-yellow-400 text-xl">⚠️</span>
+                    <div>
+                      <h3 className="font-bold text-yellow-400">Backup Recommended</h3>
+                      <p className="text-sm text-yellow-200">
+                        It's been {daysSinceBackup} days since your last backup. Regular backups protect your data.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Data Actions */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Export Section */}
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                  <h3 className="text-lg font-bold mb-4 text-green-400">📤 Export Data</h3>
+                  <p className="text-sm text-gray-300 mb-4">
+                    Download a backup of all your data. Keep this file safe - it contains your complete Vita history.
+                  </p>
+                  <div className="space-y-3">
+                    <button
+                      onClick={exportData}
+                      className="w-full py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
+                    >
+                      📥 Download Backup
+                    </button>
+                    <p className="text-xs text-gray-500">
+                      Last backup: {lastBackup ? new Date(lastBackup).toLocaleDateString() : 'Never'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Import Section */}
+                <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                  <h3 className="text-lg font-bold mb-4 text-blue-400">📥 Import Data</h3>
+                  <p className="text-sm text-gray-300 mb-4">
+                    Restore data from a previous backup. This will replace your current data.
+                  </p>
+                  <div className="space-y-3">
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={importData}
+                      className="w-full p-3 bg-slate-700 rounded text-white text-sm file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700"
+                    />
+                    <p className="text-xs text-gray-500">
+                      Select a Vita backup file (.json)
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Data Security Info */}
+              <div className="mt-8 bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <h3 className="text-lg font-bold mb-4 text-amber-400">🔒 Data Security</h3>
+                <div className="space-y-3 text-sm text-gray-300">
+                  <div className="flex items-start gap-3">
+                    <span className="text-green-400 mt-1">✅</span>
+                    <div>
+                      <strong>Local Storage:</strong> All data stays on your device
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <span className="text-green-400 mt-1">✅</span>
+                    <div>
+                      <strong>No Cloud Required:</strong> Works offline completely
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <span className="text-blue-400 mt-1">💡</span>
+                    <div>
+                      <strong>Regular Backups:</strong> Export weekly to prevent data loss
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <span className="text-amber-400 mt-1">⚠️</span>
+                    <div>
+                      <strong>Device Changes:</strong> Backup before switching devices
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* PWA Installation Info */}
+              <div className="mt-6 bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <h3 className="text-lg font-bold mb-4 text-purple-400">📱 PWA Installation</h3>
+                <p className="text-sm text-gray-300 mb-3">
+                  Vita is now a Progressive Web App! Install it on your device for a native app experience:
+                </p>
+                <div className="space-y-2 text-sm text-gray-400">
+                  <div>• <strong>iPhone:</strong> Tap share button → "Add to Home Screen"</div>
+                  <div>• <strong>Android:</strong> Tap menu → "Add to Home Screen"</div>
+                  <div>• <strong>Desktop:</strong> Click install button in address bar</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
       const total = 18;
       const done = data.done ? data.done.length : 0;
 
@@ -5461,6 +5790,19 @@
     }
 
     ReactDOM.render(<VitaApp />, document.getElementById('root'));
+
+    // Register Service Worker for PWA functionality
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+          .then((registration) => {
+            console.log('Service Worker registered successfully:', registration.scope);
+          })
+          .catch((error) => {
+            console.log('Service Worker registration failed:', error);
+          });
+      });
+    }
   </script>
 
 </body>
