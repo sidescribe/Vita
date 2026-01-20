@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Money - Simple Test</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script>
+        // Simple local storage hook
+        function useLocalStorage(key, initialValue) {
+            const [value, setValue] = React.useState(() => {
+                try {
+                    const item = window.localStorage.getItem(key);
+                    return item ? JSON.parse(item) : initialValue;
+                } catch {
+                    return initialValue;
+                }
+            });
+
+            React.useEffect(() => {
+                window.localStorage.setItem(key, JSON.stringify(value));
+            }, [value]);
+
+            return [value, setValue];
+        }
+
+        // Default data
+        const DEFAULT_ACCOUNTS = [
+            { id: '1', name: 'Personal Checking', type: 'checking', category: 'personal', isActive: true },
+            { id: '2', name: 'LLC Checking', type: 'checking', category: 'business', isActive: true },
+        ];
+
+        const DEFAULT_CATEGORIES = [
+            { id: '1', name: 'Revenue', type: 'income', businessRelevant: true },
+            { id: '2', name: 'Software/SaaS', type: 'expense', businessRelevant: true },
+            { id: '3', name: 'Groceries', type: 'expense', businessRelevant: false },
+        ];
+
+        function App() {
+            const [transactions, setTransactions] = useLocalStorage('transactions', []);
+            const [showAddTransaction, setShowAddTransaction] = React.useState(false);
+            const [editingTransaction, setEditingTransaction] = React.useState(null);
+
+            const addTransaction = (transaction) => {
+                setTransactions([...transactions, { ...transaction, id: Date.now().toString() }]);
+                setShowAddTransaction(false);
+            };
+
+            const updateTransaction = (updatedTransaction) => {
+                setTransactions(transactions.map(t =>
+                    t.id === updatedTransaction.id ? updatedTransaction : t
+                ));
+                setEditingTransaction(null);
+                setShowAddTransaction(false);
+            };
+
+            const deleteTransaction = (transactionId) => {
+                if (window.confirm('Are you sure you want to delete this transaction?')) {
+                    setTransactions(transactions.filter(t => t.id !== transactionId));
+                }
+            };
+
+            const exportToCSV = () => {
+                const headers = ['Date', 'Description', 'Amount', 'Type'];
+                const rows = transactions.map(t => [
+                    new Date(t.date).toLocaleDateString(),
+                    t.description,
+                    t.amount,
+                    t.type
+                ]);
+
+                const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `transactions-${Date.now()}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+
+            return React.createElement('div', { className: 'min-h-screen bg-gray-50 p-4' }, [
+                React.createElement('div', { key: 'header', className: 'max-w-4xl mx-auto mb-8' }, [
+                    React.createElement('h1', { key: 'title', className: 'text-3xl font-bold text-gray-900 mb-4' }, '💰 My Money - Test Version'),
+                    React.createElement('div', { key: 'actions', className: 'flex gap-4 mb-4' }, [
+                        React.createElement('button', {
+                            key: 'add',
+                            onClick: () => setShowAddTransaction(true),
+                            className: 'px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700'
+                        }, 'Add Transaction'),
+                        React.createElement('button', {
+                            key: 'export',
+                            onClick: exportToCSV,
+                            className: 'px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700'
+                        }, 'Export CSV')
+                    ])
+                ]),
+
+                React.createElement('div', { key: 'transactions', className: 'max-w-4xl mx-auto' }, [
+                    React.createElement('h2', { key: 'tx-title', className: 'text-xl font-semibold mb-4' }, 'Transactions'),
+                    React.createElement('div', { key: 'tx-list', className: 'bg-white rounded-lg border border-gray-200' },
+                        transactions.length === 0 ?
+                            React.createElement('div', { className: 'p-8 text-center text-gray-500' }, 'No transactions yet. Add your first one!') :
+                            transactions.map(tx =>
+                                React.createElement('div', {
+                                    key: tx.id,
+                                    className: 'p-4 border-b border-gray-200 hover:bg-gray-50 flex justify-between items-center'
+                                }, [
+                                    React.createElement('div', { key: 'info', className: 'flex-1' }, [
+                                        React.createElement('div', { key: 'desc', className: 'font-medium' }, tx.description),
+                                        React.createElement('div', { key: 'date', className: 'text-sm text-gray-600' },
+                                            new Date(tx.date).toLocaleDateString() + ' • ' + tx.type
+                                        )
+                                    ]),
+                                    React.createElement('div', { key: 'amount-actions', className: 'flex items-center gap-4' }, [
+                                        React.createElement('span', {
+                                            key: 'amount',
+                                            className: `font-bold ${tx.amount >= 0 ? 'text-green-600' : 'text-red-600'}`
+                                        }, `$${Math.abs(tx.amount).toFixed(2)}`),
+                                        React.createElement('button', {
+                                            key: 'edit',
+                                            onClick: () => {
+                                                setEditingTransaction(tx);
+                                                setShowAddTransaction(true);
+                                            },
+                                            className: 'px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200'
+                                        }, 'Edit'),
+                                        React.createElement('button', {
+                                            key: 'delete',
+                                            onClick: () => deleteTransaction(tx.id),
+                                            className: 'px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200'
+                                        }, 'Delete')
+                                    ])
+                                ])
+                            )
+                    )
+                ]),
+
+                showAddTransaction && React.createElement(TransactionModal, {
+                    onClose: () => {
+                        setShowAddTransaction(false);
+                        setEditingTransaction(null);
+                    },
+                    onSave: editingTransaction ? updateTransaction : addTransaction,
+                    transaction: editingTransaction
+                })
+            ]);
+        }
+
+        function TransactionModal({ onClose, onSave, transaction }) {
+            const [description, setDescription] = React.useState(transaction?.description || '');
+            const [amount, setAmount] = React.useState(transaction ? Math.abs(transaction.amount).toString() : '');
+            const [date, setDate] = React.useState(
+                transaction ? new Date(transaction.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+            );
+            const [isExpense, setIsExpense] = React.useState(transaction ? transaction.amount < 0 : true);
+            const [type, setType] = React.useState(transaction?.type || 'personal');
+
+            const handleSave = () => {
+                if (!description || !amount) {
+                    alert('Please fill in description and amount');
+                    return;
+                }
+
+                const transactionData = {
+                    ...(transaction && { id: transaction.id }),
+                    description,
+                    amount: isExpense ? -Math.abs(parseFloat(amount)) : Math.abs(parseFloat(amount)),
+                    date: new Date(date).toISOString(),
+                    type,
+                    createdAt: transaction?.createdAt || Date.now(),
+                };
+
+                onSave(transactionData);
+            };
+
+            return React.createElement('div', {
+                className: 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50'
+            },
+                React.createElement('div', { className: 'bg-white rounded-lg p-6 max-w-md w-full' }, [
+                    React.createElement('h2', { key: 'title', className: 'text-xl font-bold mb-4' },
+                        transaction ? 'Edit Transaction' : 'Add Transaction'
+                    ),
+                    React.createElement('div', { key: 'form', className: 'space-y-4' }, [
+                        React.createElement('div', { key: 'desc' }, [
+                            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Description'),
+                            React.createElement('input', {
+                                type: 'text',
+                                value: description,
+                                onChange: (e) => setDescription(e.target.value),
+                                className: 'w-full px-3 py-2 border border-gray-300 rounded-lg',
+                                placeholder: 'Transaction description'
+                            })
+                        ]),
+                        React.createElement('div', { key: 'amount' }, [
+                            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Amount'),
+                            React.createElement('input', {
+                                type: 'number',
+                                step: '0.01',
+                                value: amount,
+                                onChange: (e) => setAmount(e.target.value),
+                                className: 'w-full px-3 py-2 border border-gray-300 rounded-lg',
+                                placeholder: '0.00'
+                            }),
+                            React.createElement('div', { key: 'type-radio', className: 'flex gap-4 mt-2' }, [
+                                React.createElement('label', { className: 'flex items-center gap-2' }, [
+                                    React.createElement('input', {
+                                        type: 'radio',
+                                        checked: !isExpense,
+                                        onChange: () => setIsExpense(false)
+                                    }),
+                                    'Income'
+                                ]),
+                                React.createElement('label', { className: 'flex items-center gap-2' }, [
+                                    React.createElement('input', {
+                                        type: 'radio',
+                                        checked: isExpense,
+                                        onChange: () => setIsExpense(true)
+                                    }),
+                                    'Expense'
+                                ])
+                            ])
+                        ]),
+                        React.createElement('div', { key: 'date' }, [
+                            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Date'),
+                            React.createElement('input', {
+                                type: 'date',
+                                value: date,
+                                onChange: (e) => setDate(e.target.value),
+                                className: 'w-full px-3 py-2 border border-gray-300 rounded-lg'
+                            })
+                        ]),
+                        React.createElement('div', { key: 'type' }, [
+                            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Type'),
+                            React.createElement('select', {
+                                value: type,
+                                onChange: (e) => setType(e.target.value),
+                                className: 'w-full px-3 py-2 border border-gray-300 rounded-lg'
+                            }, [
+                                React.createElement('option', { key: 'personal', value: 'personal' }, 'Personal'),
+                                React.createElement('option', { key: 'business', value: 'business' }, 'Business')
+                            ])
+                        ])
+                    ]),
+                    React.createElement('div', { key: 'buttons', className: 'flex gap-3 mt-6' }, [
+                        React.createElement('button', {
+                            onClick: onClose,
+                            className: 'flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50'
+                        }, 'Cancel'),
+                        React.createElement('button', {
+                            onClick: handleSave,
+                            className: 'flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700'
+                        }, transaction ? 'Update' : 'Save')
+                    ])
+                ])
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(React.createElement(App));
+    </script>
+</body>
+</html>

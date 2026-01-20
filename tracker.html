@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Vita — Tracker</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:20px;background:#0f172a;color:#e6eef8}
+    .container{max-width:820px;margin:0 auto}
+    .card{background:#0b1220;border:1px solid #1f2937;padding:16px;border-radius:10px}
+    input,select,textarea{width:100%;padding:8px;border-radius:6px;border:1px solid #334155;background:#071226;color:#e6eef8}
+    button{padding:8px 12px;border-radius:6px;border:0;background:#f59e0b;color:#071226;cursor:pointer}
+    .muted{color:#94a3b8;font-size:13px}
+    .event{display:flex;justify-content:space-between;gap:12px;padding:10px;border-radius:8px;border:1px solid #122233;background:#06131f;margin-top:8px}
+    .small{font-size:13px;color:#94a3b8}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Tracker — Birthdays & Maintenance</h1>
+    <p class="muted">Add events like birthdays or filter changes and track days until they occur. Supports one-time or annual recurrence.</p>
+
+    <div class="card" style="margin-top:12px">
+      <label>Title</label>
+      <input id="title" placeholder="e.g., Mom's Birthday, Change AC Filter" />
+
+      <label style="margin-top:8px">Date</label>
+      <input id="date" type="date" />
+
+      <label style="margin-top:8px">Recurrence</label>
+      <select id="recurrence">
+        <option value="none">One-time</option>
+        <option value="annual">Annual (birthday, yearly maintenance)</option>
+      </select>
+
+      <div style="margin-top:10px;display:flex;gap:8px">
+        <button id="save">Save Event</button>
+        <button id="clear" style="background:#334155;color:#e6eef8">Clear All</button>
+        <div style="flex:1"></div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:18px">Upcoming Events</h3>
+    <div id="list"></div>
+    
+    <!-- Encapsulated / Time-Locked Notes -->
+    <h3 style="margin-top:26px">🔒 Encapsulated Notes</h3>
+    <div class="card" style="margin-top:8px">
+      <label>Note</label>
+      <textarea id="enc-note" placeholder="Write a message to your future self..." style="height:90px"></textarea>
+
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+        <label style="white-space:nowrap">Lock days</label>
+        <input id="enc-days" type="number" min="1" value="365" style="width:110px" />
+        <button id="enc-save">Create Locked Note</button>
+        <button id="enc-clear" style="background:#334155;color:#e6eef8">Clear All</button>
+      </div>
+
+      <div id="enc-list" style="margin-top:12px"></div>
+    </div>
+  </div>
+
+  <script>
+    const KEY = 'vita-tracker-events-v1'
+    const el = {
+      title: document.getElementById('title'),
+      date: document.getElementById('date'),
+      recurrence: document.getElementById('recurrence'),
+      save: document.getElementById('save'),
+      clear: document.getElementById('clear'),
+      list: document.getElementById('list')
+    }
+
+    let events = JSON.parse(localStorage.getItem(KEY) || '[]')
+    let editingId = null
+
+    function saveStore(){ localStorage.setItem(KEY, JSON.stringify(events)) }
+
+    function daysUntilDate(dStr, recurrence){
+      if(!dStr) return Infinity
+      const today = new Date(); today.setHours(0,0,0,0)
+      const target = new Date(dStr)
+      if(recurrence === 'annual'){
+        // use month/day of target, find next occurrence
+        const month = target.getMonth(); const day = target.getDate()
+        let next = new Date(today.getFullYear(), month, day)
+        if(next < today) next = new Date(today.getFullYear()+1, month, day)
+        const diff = Math.ceil((next - today)/(24*60*60*1000))
+        return { days: diff, nextDate: next }
+      } else {
+        const diff = Math.ceil((target - today)/(24*60*60*1000))
+        return { days: diff, nextDate: target }
+      }
+    }
+
+    function render(){
+      el.list.innerHTML = ''
+      if(!events.length){ el.list.innerHTML = '<p class="muted">No events yet.</p>'; return }
+      // sort by next occurrence
+      const mapped = events.map(ev => {
+        const info = daysUntilDate(ev.date, ev.recurrence)
+        return { ...ev, days: info.days, next: info.nextDate }
+      }).sort((a,b)=>a.days - b.days)
+
+      mapped.forEach(ev => {
+        const div = document.createElement('div'); div.className = 'event'
+        const left = document.createElement('div')
+        const title = document.createElement('div'); title.textContent = ev.title; title.style.fontWeight='600'
+        const meta = document.createElement('div'); meta.className = 'small'
+        if(ev.recurrence === 'annual') meta.textContent = `Next: ${ev.next.toLocaleDateString()} • Recurs annually`;
+        else meta.textContent = `Date: ${ev.next.toLocaleDateString()}`
+        left.appendChild(title); left.appendChild(meta)
+
+        const right = document.createElement('div'); right.style.textAlign='right'
+        const days = document.createElement('div'); days.style.fontSize='20px'; days.style.fontWeight='700'
+        days.textContent = ev.days >= 0 ? `${ev.days}d` : 'past'
+        const actions = document.createElement('div'); actions.style.marginTop='8px'
+        const edit = document.createElement('button'); edit.textContent = 'Edit'; edit.style.marginRight='6px'; edit.onclick = ()=> startEdit(ev.id)
+        const del = document.createElement('button'); del.textContent = 'Delete'; del.style.background='#ef4444'; del.style.color='#fff'; del.onclick = ()=>{ if(confirm('Delete this event?')){ events = events.filter(x=>x.id!==ev.id); saveStore(); render() } }
+        actions.appendChild(edit); actions.appendChild(del)
+
+        right.appendChild(days); right.appendChild(actions)
+        div.appendChild(left); div.appendChild(right)
+        el.list.appendChild(div)
+      })
+    }
+
+    function startEdit(id){
+      const ev = events.find(x=>x.id===id); if(!ev) return
+      editingId = id
+      el.title.value = ev.title
+      el.date.value = ev.date
+      el.recurrence.value = ev.recurrence || 'none'
+      el.save.textContent = 'Update Event'
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+
+    function addOrUpdate(){
+      const title = el.title.value.trim(); const date = el.date.value; const recurrence = el.recurrence.value
+      if(!title || !date) return alert('Please provide title and date.')
+      if(editingId){
+        events = events.map(ev => ev.id===editingId ? {...ev, title, date, recurrence } : ev)
+        editingId = null; el.save.textContent = 'Save Event'
+      } else {
+        events.push({ id: Date.now().toString(36), title, date, recurrence, created: Date.now() })
+      }
+      el.title.value = ''; el.date.value = ''; el.recurrence.value='none'
+      saveStore(); render()
+    }
+
+    el.save.addEventListener('click', addOrUpdate)
+    el.clear.addEventListener('click', ()=>{ if(confirm('Clear ALL events?')){ events=[]; saveStore(); render() } })
+
+    render()
+  </script>
+  <script>
+    // Encapsulated / Time-Locked Notes script
+    (function(){
+      const KEY = 'encapsulated-notes-v1'
+      const el = {
+        note: document.getElementById('enc-note'),
+        days: document.getElementById('enc-days'),
+        save: document.getElementById('enc-save'),
+        clear: document.getElementById('enc-clear'),
+        list: document.getElementById('enc-list')
+      }
+
+      let notes = JSON.parse(localStorage.getItem(KEY) || '[]')
+
+      function saveStore(){ localStorage.setItem(KEY, JSON.stringify(notes)) }
+
+      function formatRemaining(ms){
+        if(ms <= 0) return 'unlocked'
+        const days = Math.ceil(ms / (24*60*60*1000))
+        return days + (days===1 ? ' day' : ' days')
+      }
+
+      function render(){
+        el.list.innerHTML = ''
+        if(!notes.length){ el.list.innerHTML = '<p class="muted">No locked notes.</p>'; return }
+        const now = Date.now()
+        notes.slice().reverse().forEach(n=>{
+          const wrap = document.createElement('div')
+          wrap.style = 'background:#06131f;border:1px solid #122233;padding:10px;border-radius:6px;margin-bottom:8px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start'
+          const left = document.createElement('div')
+          const meta = document.createElement('div'); meta.className = 'small'; meta.style.marginTop='6px'
+          meta.textContent = `Created: ${new Date(n.created).toLocaleString()} • Unlocks: ${new Date(n.unlockAt).toLocaleString()}`
+          if(now < n.unlockAt){
+            left.innerHTML = '<strong>Locked note</strong><div style="margin-top:8px;color:#94a3b8">Hidden until unlock date.</div>'
+            left.appendChild(meta)
+          } else {
+            const text = document.createElement('div'); text.textContent = n.text; text.style = 'white-space:pre-wrap; color:#e6eef8'
+            left.appendChild(text); left.appendChild(meta)
+          }
+
+          const actions = document.createElement('div')
+          actions.style = 'display:flex;flex-direction:column;gap:6px;align-items:flex-end'
+          const rem = document.createElement('div'); rem.className='small'
+          rem.textContent = now < n.unlockAt ? `Unlocks in ${formatRemaining(n.unlockAt - now)}` : 'Unlocked'
+          actions.appendChild(rem)
+
+          const del = document.createElement('button'); del.textContent = 'Delete'; del.style='padding:6px;background:#ef4444;color:#fff;border-radius:6px;border:0'
+          del.onclick = ()=>{ if(confirm('Delete this note?')){ notes = notes.filter(x=>x.id!==n.id); saveStore(); render() } }
+          actions.appendChild(del)
+
+          wrap.appendChild(left); wrap.appendChild(actions)
+          el.list.appendChild(wrap)
+        })
+      }
+
+      function addNote(text, days){
+        const d = Math.max(1, parseInt(days)||365)
+        const unlockAt = Date.now() + d * 24*60*60*1000
+        notes.push({ id: Date.now().toString(36), text: text.trim(), created: Date.now(), unlockAt })
+        saveStore(); render()
+        el.note.value = ''; el.days.value = '365'
+      }
+
+      el.save.addEventListener('click', ()=>{
+        const t = el.note.value.trim()
+        if(!t) return alert('Enter a note.')
+        addNote(t, el.days.value)
+      })
+
+      el.clear.addEventListener('click', ()=>{
+        if(confirm('Clear ALL encapsulated notes?')){ notes = []; saveStore(); render() }
+      })
+
+      render()
+    })()
+  </script>
+</body>
+</html>
