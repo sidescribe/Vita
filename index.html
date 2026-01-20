@@ -6028,6 +6028,58 @@
       });
     }
   </script>
+</body>
+</script>
 
+<!-- Standalone initializers: ensure tracker and encapsulated notes render on page load -->
+<script>
+  (function(){
+    function initTrackerStandalone(){
+      try{
+        const KEY = 'vita-tracker-events-v1'
+        const title = document.getElementById('tracker-title')
+        if(!title) return
+        const el = {
+          title,
+          date: document.getElementById('tracker-date'),
+          recurrence: document.getElementById('tracker-recurrence'),
+          save: document.getElementById('tracker-save'),
+          clear: document.getElementById('tracker-clear'),
+          list: document.getElementById('tracker-list')
+        }
+        let events = JSON.parse(localStorage.getItem(KEY) || '[]')
+        let editingId = null
+        function saveStore(){ localStorage.setItem(KEY, JSON.stringify(events)) }
+        function daysUntilDate(dStr, recurrence){ if(!dStr) return { days: Infinity, nextDate: null }; const today=new Date(); today.setHours(0,0,0,0); const target=new Date(dStr); if(recurrence==='annual'){ const month=target.getMonth(); const day=target.getDate(); let next=new Date(today.getFullYear(), month, day); if(next < today) next = new Date(today.getFullYear()+1, month, day); const diff=Math.ceil((next-today)/(24*60*60*1000)); return { days: diff, nextDate: next }; } else { const diff=Math.ceil((target-today)/(24*60*60*1000)); return { days: diff, nextDate: target }; } }
+        function render(){ el.list.innerHTML=''; if(!events.length){ el.list.innerHTML = '<p style="color:#94a3b8">No events yet.</p>'; return } const mapped = events.map(ev => { const info = daysUntilDate(ev.date, ev.recurrence); return {...ev, days: info.days, next: info.nextDate} }).sort((a,b)=>a.days-b.days); mapped.forEach(ev=>{ const wrap=document.createElement('div'); wrap.style.cssText='display:flex;justify-content:space-between;gap:12px;padding:10px;border-radius:8px;border:1px solid #122233;background:#06131f;margin-top:8px'; const left=document.createElement('div'); const titleEl=document.createElement('div'); titleEl.textContent=ev.title; titleEl.style.fontWeight='600'; const meta=document.createElement('div'); meta.style.cssText='font-size:13px;color:#94a3b8;margin-top:4px'; meta.textContent = ev.recurrence==='annual' ? `Next: ${ev.next.toLocaleDateString()} • Recurs annually` : `Date: ${ev.next.toLocaleDateString()}`; left.appendChild(titleEl); left.appendChild(meta); const right=document.createElement('div'); right.style.textAlign='right'; const days=document.createElement('div'); days.style.cssText='font-size:20px;font-weight:700;color:#f59e0b'; days.textContent = ev.days>=0? `${ev.days}d` : 'past'; const actions=document.createElement('div'); actions.style.marginTop='8px'; const edit=document.createElement('button'); edit.textContent='Edit'; edit.style.marginRight='6px'; edit.onclick=()=>startEdit(ev.id); const del=document.createElement('button'); del.textContent='Delete'; del.style.cssText='background:#ef4444;color:#fff;padding:6px;border-radius:6px;border:0'; del.onclick=()=>{ if(confirm('Delete this event?')){ events = events.filter(x=>x.id!==ev.id); saveStore(); render(); } }; actions.appendChild(edit); actions.appendChild(del); right.appendChild(days); right.appendChild(actions); wrap.appendChild(left); wrap.appendChild(right); el.list.appendChild(wrap); }); }
+        function startEdit(id){ const ev = events.find(x=>x.id===id); if(!ev) return; editingId = id; el.title.value = ev.title; el.date.value = ev.date; el.recurrence.value = ev.recurrence || 'none'; el.save.textContent = 'Update Event'; window.scrollTo({ top: 0, behavior: 'smooth' }); }
+        function addOrUpdate(){ const titleVal = el.title.value.trim(); const dateVal = el.date.value; const recurrence = el.recurrence.value; if(!titleVal || !dateVal) return alert('Please provide title and date.'); if(editingId){ events = events.map(ev => ev.id===editingId ? {...ev, title: titleVal, date: dateVal, recurrence } : ev); editingId = null; el.save.textContent = 'Save Event' } else { events.push({ id: Date.now().toString(36), title: titleVal, date: dateVal, recurrence, created: Date.now() }) } el.title.value=''; el.date.value=''; el.recurrence.value='none'; saveStore(); render(); }
+        el.save.addEventListener('click', addOrUpdate); el.clear.addEventListener('click', ()=>{ if(confirm('Clear ALL events?')){ events = []; saveStore(); render(); } }); render();
+      }catch(e){ console.error('initTrackerStandalone', e) }
+    }
+
+    function initEncapsulatedNotesStandalone(){
+      try{
+        const KEY = 'encapsulated-notes-v1'
+        const note = document.getElementById('enc-note-ai'); if(!note) return
+        const el = { note, days: document.getElementById('enc-days-ai'), save: document.getElementById('enc-save-ai'), clear: document.getElementById('enc-clear-ai'), list: document.getElementById('enc-list-ai') }
+        let notes = JSON.parse(localStorage.getItem(KEY) || '[]')
+        function saveStore(){ localStorage.setItem(KEY, JSON.stringify(notes)) }
+        function formatRemaining(ms){ if(ms<=0) return 'unlocked'; const d=Math.ceil(ms/(24*60*60*1000)); return d+' day'+(d===1?'':'s') }
+        function render(){ el.list.innerHTML=''; if(!notes.length){ el.list.innerHTML = '<div style="color:#94a3b8">No locked notes.</div>'; return } const now = Date.now(); notes.slice().reverse().forEach(n=>{ const wrap=document.createElement('div'); wrap.style.cssText='background:#06131f;border:1px solid #122233;padding:10px;border-radius:6px;margin-bottom:8px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start'; const left=document.createElement('div'); const meta=document.createElement('div'); meta.style.cssText='font-size:12px;color:#94a3b8;margin-top:6px'; meta.textContent = `Created: ${new Date(n.created).toLocaleString()} • Unlocks: ${new Date(n.unlockAt).toLocaleString()}`; if(now < n.unlockAt){ left.innerHTML = '<strong style="color:#f59e0b">Locked note</strong><div style="margin-top:8px;color:#cbd5e1">Hidden until unlock date.</div>'; left.appendChild(meta); } else { const text = document.createElement('div'); text.textContent = n.text; text.style.whiteSpace='pre-wrap'; text.style.color='#e6eef8'; left.appendChild(text); left.appendChild(meta); } const actions=document.createElement('div'); actions.style.cssText='display:flex;flex-direction:column;gap:6px;align-items:flex-end'; const rem=document.createElement('div'); rem.className='small'; rem.textContent = now < n.unlockAt ? `Unlocks in ${formatRemaining(n.unlockAt - now)}` : 'Unlocked'; const del=document.createElement('button'); del.textContent='Delete'; del.style.cssText='padding:6px;background:#ef4444;color:#fff;border-radius:6px;border:0'; del.onclick = ()=>{ if(confirm('Delete this note?')){ notes = notes.filter(x=>x.id!==n.id); saveStore(); render(); } }; actions.appendChild(rem); actions.appendChild(del); wrap.appendChild(left); wrap.appendChild(actions); el.list.appendChild(wrap); }); }
+        function addNote(text, days){ const d = Math.max(1, parseInt(days)||365); const unlockAt = Date.now() + d * 24*60*60*1000; notes.push({ id: Date.now().toString(36), text: text.trim(), created: Date.now(), unlockAt }); saveStore(); render(); el.note.value=''; el.days.value='365' }
+        el.save.addEventListener('click', ()=>{ const t = el.note.value.trim(); if(!t) return alert('Enter a note.'); addNote(t, el.days.value) })
+        el.clear.addEventListener('click', ()=>{ if(confirm('Clear ALL encapsulated notes?')){ notes=[]; saveStore(); render() } })
+        render()
+      }catch(e){ console.error('initEncapsulatedNotesStandalone', e) }
+    }
+
+    if (document.readyState === 'loading'){
+      document.addEventListener('DOMContentLoaded', ()=>{ initTrackerStandalone(); initEncapsulatedNotesStandalone(); })
+    } else {
+      initTrackerStandalone(); initEncapsulatedNotesStandalone();
+    }
+  })()
+</script>
 </body>
 </html>
