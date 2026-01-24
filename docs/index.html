@@ -436,6 +436,13 @@
         }
       }, []);
 
+      // Data integrity check when switching to data view
+      useEffect(() => {
+        if (view === 'data') {
+          validateDataIntegrity();
+        }
+      }, [view]);
+
       async function loadData() {
         setLoading(true);
         const storage = makeStorage();
@@ -5586,8 +5593,7 @@
       }
 
       if (view === 'data') {
-        // Data integrity check
-        validateDataIntegrity();
+        // Data integrity check is now handled in useEffect below
 
         // Check last backup
         const lastBackup = localStorage.getItem('vita-last-backup');
