@@ -2959,7 +2959,7 @@
         };
 
         // Data import functionality
-        const importData = (event) => {
+        function importData(event) {
           const file = event.target.files[0];
           if (!file) return;
 
@@ -3002,7 +3002,7 @@
             }
           };
           reader.readAsText(file);
-        };
+        }
 
         // Data integrity check
       function validateDataIntegrity() {
