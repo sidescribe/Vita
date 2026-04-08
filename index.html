@@ -108,6 +108,9 @@
       }); // Current affirmations for each category
       const [foodSearchTerm, setFoodSearchTerm] = useState(''); // Search term for nutrition foods
       const [showDataModal, setShowDataModal] = useState(false); // Data management modal
+      const [backupBanner, setBackupBanner] = useState(null); // Non-blocking backup reminder
+      const [showMoreNav, setShowMoreNav] = useState(false); // "More" dropdown in nav
+      const [focusTasks, setFocusTasks] = useState(null); // User-selected focus tasks for today
 
       console.log('All state initialized successfully');
 
@@ -368,59 +371,27 @@
         }
       }, []);
 
-      // Backup reminder check
+      // Soft backup reminder — non-blocking banner instead of confirm()
       useEffect(() => {
-        const checkBackupReminder = () => {
-          const lastBackup = localStorage.getItem('vita-last-backup');
-          const daysSinceBackup = lastBackup ?
-            Math.floor((Date.now() - new Date(lastBackup).getTime()) / (1000 * 60 * 60 * 24)) : 999;
+        const lastBackup = localStorage.getItem('vita-last-backup');
+        const daysSinceBackup = lastBackup ?
+          Math.floor((Date.now() - new Date(lastBackup).getTime()) / (1000 * 60 * 60 * 24)) : 999;
+        if (daysSinceBackup > 7) {
+          setBackupBanner(daysSinceBackup);
+        }
+      }, []);
 
-          if (daysSinceBackup > 7) {
-            // Show reminder after a delay to not be intrusive
-            setTimeout(() => {
-              if (confirm(`It's been ${daysSinceBackup} days since your last Vita backup. Would you like to export your data now to prevent data loss?`)) {
-                const exportData = () => {
-                  const exportData = {
-                    version: '1.1.0',
-                    timestamp: new Date().toISOString(),
-                    app: 'Vita - Personal Development Tracker',
-                    data: {
-                      history,
-                      nutritionData,
-                      knowledgeBase,
-                      spacedRepetition,
-                      currentBookApplication,
-                      challenges,
-                      completedChallenges,
-                      badges,
-                      aiCoachInsights,
-                      readingProgress,
-                      readingHistory
-                    }
-                  };
-
-                  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `vita-backup-${new Date().toISOString().split('T')[0]}.json`;
-                  a.click();
-                  URL.createObjectURL(url);
-
-                  // Update last backup timestamp
-                  localStorage.setItem('vita-last-backup', new Date().toISOString());
-                };
-                exportData();
-              }
-            }, 3000); // 3 second delay
-          }
-        };
-
-        // Check on component mount and periodically
-        checkBackupReminder();
-        const interval = setInterval(checkBackupReminder, 24 * 60 * 60 * 1000); // Daily check
-
-        return () => clearInterval(interval);
+      // Load focus tasks from localStorage
+      useEffect(() => {
+        const savedFocus = localStorage.getItem('vita-focus-tasks');
+        if (savedFocus) {
+          try {
+            const parsed = JSON.parse(savedFocus);
+            if (parsed.date === getTodayLocal()) {
+              setFocusTasks(parsed.tasks);
+            }
+          } catch (e) {}
+        }
       }, []);
 
       // Load knowledge data on component mount
@@ -733,21 +704,6 @@
         const storage = makeStorage();
         const selectedWorkoutType = manualWorkoutType || workout.type;
 
-        // Validate that weights are entered for non-running workouts
-        if (selectedWorkoutType !== 'running') {
-          const workoutExercises = exercises[selectedWorkoutType][workout.var];
-          const missingWeights = workoutExercises.filter(ex => {
-            const exerciseWeights = weights[ex] || [];
-            const setMatch = ex.match(/(\d+)x\d+/);
-            const numSets = setMatch ? parseInt(setMatch[1]) : 1;
-            // Check if all sets have weights entered
-            return exerciseWeights.length < numSets || exerciseWeights.slice(0, numSets).some(w => !w || w === '');
-          });
-          if (missingWeights.length > 0) {
-            alert(`Please enter weights for all sets in: ${missingWeights.join(', ')}`);
-            return;
-          }
-        }
         const nd = {
           ...data,
           workoutType: selectedWorkoutType,
@@ -803,6 +759,48 @@
         if (!workout || currentWorkoutType === 'running') return;
         const vars = exercises[currentWorkoutType] || [];
         setWorkout({ ...workout, var: (workout.var + 1) % Math.max(1, vars.length) });
+      }
+
+      function getStreak() {
+        if (!history || history.length === 0) return 0;
+        let streak = 0;
+        const sorted = [...history].sort((a, b) => new Date(b.date) - new Date(a.date));
+        const todayStr = getTodayLocal();
+        const todayHasData = data && data.done && data.done.length > 0;
+        if (todayHasData) streak = 1;
+        else if (sorted.length > 0 && sorted[0].date === todayStr) {
+          if (sorted[0].done && sorted[0].done.length > 0) streak = 1;
+        }
+        const startIdx = sorted[0]?.date === todayStr ? 1 : 0;
+        let expectedDate = new Date(todayStr);
+        expectedDate.setDate(expectedDate.getDate() - (streak > 0 ? 1 : 0));
+        for (let i = startIdx; i < sorted.length; i++) {
+          const dayDate = new Date(sorted[i].date);
+          const diff = Math.round((expectedDate - dayDate) / (1000 * 60 * 60 * 24));
+          if (diff === 0 && sorted[i].done && sorted[i].done.length > 0) {
+            streak++;
+            expectedDate.setDate(expectedDate.getDate() - 1);
+          } else if (diff === 0) {
+            break;
+          } else {
+            break;
+          }
+        }
+        return streak;
+      }
+
+      function toggleFocusTask(taskId) {
+        const allTasks = [...tasks.core, ...tasks.lead, ...tasks.comm];
+        const current = focusTasks || [];
+        let updated;
+        if (current.includes(taskId)) {
+          updated = current.filter(id => id !== taskId);
+        } else {
+          if (current.length >= 5) return;
+          updated = [...current, taskId];
+        }
+        setFocusTasks(updated);
+        localStorage.setItem('vita-focus-tasks', JSON.stringify({ date: getTodayLocal(), tasks: updated }));
       }
 
       // Knowledge Integration Functions
@@ -2802,19 +2800,27 @@
 
       if (view === 'nutrition') {
 
-        // Expanded food database with 80+ foods
+        // Comprehensive food database with 500+ foods
         const foodDatabase = {
           proteins: [
             // Poultry
             { name: "Chicken Breast (4oz)", calories: 165, protein: 31, carbs: 0, fat: 3.6 },
             { name: "Chicken Thigh (4oz)", calories: 203, protein: 25, carbs: 0, fat: 11 },
             { name: "Chicken Wings (3oz)", calories: 203, protein: 20, carbs: 0, fat: 14 },
+            { name: "Chicken Drumstick (4oz)", calories: 172, protein: 28, carbs: 0, fat: 6 },
+            { name: "Chicken Tenders (4oz)", calories: 180, protein: 29, carbs: 6, fat: 4 },
+            { name: "Rotisserie Chicken (4oz)", calories: 190, protein: 27, carbs: 0, fat: 9 },
+            { name: "Chicken Sausage (1 link)", calories: 140, protein: 15, carbs: 1, fat: 8 },
             { name: "Turkey Breast (4oz)", calories: 135, protein: 30, carbs: 0, fat: 1 },
             { name: "Turkey Ground (4oz)", calories: 170, protein: 22, carbs: 0, fat: 8 },
+            { name: "Turkey Sausage (1 link)", calories: 130, protein: 13, carbs: 1, fat: 8 },
+            { name: "Turkey Leg (4oz)", calories: 175, protein: 28, carbs: 0, fat: 6 },
             { name: "Duck Breast (4oz)", calories: 190, protein: 25, carbs: 0, fat: 9 },
+            { name: "Cornish Hen (4oz)", calories: 180, protein: 26, carbs: 0, fat: 8 },
 
             // Fish & Seafood
             { name: "Salmon (4oz)", calories: 206, protein: 22, carbs: 0, fat: 12 },
+            { name: "Salmon (smoked, 3oz)", calories: 100, protein: 16, carbs: 0, fat: 4 },
             { name: "Tilapia (4oz)", calories: 128, protein: 26, carbs: 0, fat: 3 },
             { name: "Tuna (canned, 4oz)", calories: 100, protein: 22, carbs: 0, fat: 1 },
             { name: "Tuna (fresh, 4oz)", calories: 130, protein: 28, carbs: 0, fat: 1 },
@@ -2822,31 +2828,102 @@
             { name: "Cod (4oz)", calories: 105, protein: 23, carbs: 0, fat: 1 },
             { name: "Halibut (4oz)", calories: 119, protein: 23, carbs: 0, fat: 3 },
             { name: "Mahi Mahi (4oz)", calories: 109, protein: 23, carbs: 0, fat: 1 },
+            { name: "Swordfish (4oz)", calories: 165, protein: 27, carbs: 0, fat: 6 },
+            { name: "Sea Bass (4oz)", calories: 124, protein: 24, carbs: 0, fat: 3 },
+            { name: "Trout (4oz)", calories: 168, protein: 24, carbs: 0, fat: 8 },
+            { name: "Catfish (4oz)", calories: 152, protein: 19, carbs: 0, fat: 8 },
+            { name: "Sardines (canned, 3oz)", calories: 177, protein: 21, carbs: 0, fat: 10 },
+            { name: "Anchovies (1oz)", calories: 37, protein: 6, carbs: 0, fat: 1 },
+            { name: "Crab Meat (4oz)", calories: 98, protein: 20, carbs: 0, fat: 1 },
+            { name: "Lobster (4oz)", calories: 102, protein: 21, carbs: 0, fat: 1 },
+            { name: "Scallops (4oz)", calories: 94, protein: 18, carbs: 3, fat: 1 },
+            { name: "Clams (4oz)", calories: 84, protein: 14, carbs: 3, fat: 1 },
+            { name: "Mussels (4oz)", calories: 97, protein: 14, carbs: 4, fat: 3 },
+            { name: "Oysters (6 medium)", calories: 57, protein: 6, carbs: 3, fat: 2 },
+            { name: "Calamari (4oz)", calories: 104, protein: 18, carbs: 3, fat: 2 },
+            { name: "Octopus (4oz)", calories: 93, protein: 17, carbs: 2, fat: 1 },
 
-            // Beef & Pork
+            // Beef
             { name: "Beef (lean, 4oz)", calories: 170, protein: 26, carbs: 0, fat: 7 },
-            { name: "Beef (ground, 4oz)", calories: 217, protein: 20, carbs: 0, fat: 15 },
+            { name: "Beef (ground 80/20, 4oz)", calories: 287, protein: 19, carbs: 0, fat: 23 },
+            { name: "Beef (ground 90/10, 4oz)", calories: 217, protein: 22, carbs: 0, fat: 14 },
+            { name: "Beef (ground 93/7, 4oz)", calories: 170, protein: 24, carbs: 0, fat: 8 },
             { name: "Beef Steak (sirloin, 4oz)", calories: 190, protein: 26, carbs: 0, fat: 9 },
+            { name: "Beef Steak (ribeye, 4oz)", calories: 250, protein: 26, carbs: 0, fat: 16 },
+            { name: "Beef Steak (filet mignon, 4oz)", calories: 200, protein: 28, carbs: 0, fat: 10 },
+            { name: "Beef Steak (NY strip, 4oz)", calories: 220, protein: 26, carbs: 0, fat: 13 },
+            { name: "Beef Steak (flank, 4oz)", calories: 180, protein: 26, carbs: 0, fat: 8 },
+            { name: "Beef Steak (skirt, 4oz)", calories: 200, protein: 25, carbs: 0, fat: 11 },
+            { name: "Beef Roast (4oz)", calories: 185, protein: 26, carbs: 0, fat: 8 },
+            { name: "Beef Brisket (4oz)", calories: 246, protein: 24, carbs: 0, fat: 16 },
+            { name: "Beef Short Ribs (4oz)", calories: 290, protein: 23, carbs: 0, fat: 22 },
+            { name: "Beef Liver (4oz)", calories: 153, protein: 23, carbs: 4, fat: 4 },
+            { name: "Corned Beef (4oz)", calories: 213, protein: 15, carbs: 0, fat: 16 },
+            { name: "Beef Stew Meat (4oz)", calories: 180, protein: 26, carbs: 0, fat: 8 },
+            { name: "Veal Cutlet (4oz)", calories: 167, protein: 30, carbs: 0, fat: 5 },
+
+            // Pork
             { name: "Pork Tenderloin (4oz)", calories: 143, protein: 26, carbs: 0, fat: 3 },
             { name: "Pork Chops (4oz)", calories: 193, protein: 25, carbs: 0, fat: 9 },
+            { name: "Pork Loin (4oz)", calories: 163, protein: 27, carbs: 0, fat: 5 },
+            { name: "Pork Belly (4oz)", calories: 518, protein: 10, carbs: 0, fat: 53 },
+            { name: "Pork Ribs (4oz)", calories: 290, protein: 20, carbs: 0, fat: 23 },
+            { name: "Pork Shoulder (4oz)", calories: 232, protein: 23, carbs: 0, fat: 15 },
+            { name: "Ground Pork (4oz)", calories: 252, protein: 18, carbs: 0, fat: 20 },
             { name: "Bacon (2 slices)", calories: 87, protein: 6, carbs: 0, fat: 7 },
+            { name: "Bacon (turkey, 2 slices)", calories: 60, protein: 4, carbs: 0, fat: 5 },
+            { name: "Canadian Bacon (2 slices)", calories: 68, protein: 9, carbs: 1, fat: 3 },
+            { name: "Ham (4oz)", calories: 120, protein: 20, carbs: 2, fat: 4 },
+            { name: "Ham (deli, 3 slices)", calories: 90, protein: 14, carbs: 2, fat: 3 },
+            { name: "Prosciutto (2oz)", calories: 130, protein: 14, carbs: 0, fat: 8 },
+            { name: "Pepperoni (1oz)", calories: 138, protein: 6, carbs: 0, fat: 12 },
+            { name: "Salami (1oz)", calories: 119, protein: 6, carbs: 0, fat: 10 },
+            { name: "Sausage (Italian, 1 link)", calories: 268, protein: 17, carbs: 1, fat: 21 },
+            { name: "Sausage (breakfast, 2 links)", calories: 180, protein: 10, carbs: 0, fat: 16 },
+            { name: "Bratwurst (1 link)", calories: 283, protein: 12, carbs: 2, fat: 25 },
+            { name: "Hot Dog (1 beef)", calories: 186, protein: 7, carbs: 2, fat: 17 },
+            { name: "Hot Dog (1 turkey)", calories: 100, protein: 8, carbs: 3, fat: 6 },
 
-            // Eggs & Dairy
+            // Lamb & Game
+            { name: "Lamb Chops (4oz)", calories: 229, protein: 25, carbs: 0, fat: 14 },
+            { name: "Lamb Leg (4oz)", calories: 183, protein: 26, carbs: 0, fat: 8 },
+            { name: "Ground Lamb (4oz)", calories: 240, protein: 21, carbs: 0, fat: 17 },
+            { name: "Bison/Buffalo (4oz)", calories: 143, protein: 28, carbs: 0, fat: 2 },
+            { name: "Venison (4oz)", calories: 134, protein: 26, carbs: 0, fat: 3 },
+            { name: "Elk (4oz)", calories: 124, protein: 26, carbs: 0, fat: 2 },
+
+            // Eggs
+            { name: "Egg (1 large)", calories: 72, protein: 6, carbs: 0, fat: 5 },
             { name: "Eggs (2 large)", calories: 143, protein: 13, carbs: 1, fat: 10 },
+            { name: "Eggs (3 large)", calories: 215, protein: 19, carbs: 1, fat: 15 },
             { name: "Egg Whites (4 large)", calories: 68, protein: 14, carbs: 1, fat: 0 },
             { name: "Scrambled Eggs (2 large)", calories: 203, protein: 13, carbs: 2, fat: 15 },
             { name: "Omelette (2 eggs + veggies)", calories: 180, protein: 14, carbs: 4, fat: 12 },
+            { name: "Omelette (3 eggs + cheese)", calories: 340, protein: 24, carbs: 2, fat: 26 },
+            { name: "Hard Boiled Egg (1 large)", calories: 78, protein: 6, carbs: 1, fat: 5 },
+            { name: "Fried Egg (1 large)", calories: 90, protein: 6, carbs: 0, fat: 7 },
+            { name: "Poached Egg (1 large)", calories: 72, protein: 6, carbs: 0, fat: 5 },
+            { name: "Deviled Eggs (2 halves)", calories: 126, protein: 6, carbs: 1, fat: 10 },
+
+            // Dairy Proteins
             { name: "Greek Yogurt (plain, 6oz)", calories: 100, protein: 18, carbs: 6, fat: 0 },
             { name: "Greek Yogurt (vanilla, 6oz)", calories: 120, protein: 18, carbs: 12, fat: 1 },
             { name: "Cottage Cheese (4oz)", calories: 110, protein: 13, carbs: 3, fat: 5 },
             { name: "Cheese (cheddar, 1oz)", calories: 113, protein: 7, carbs: 1, fat: 9 },
 
             // Plant-Based Proteins
-            { name: "Protein Shake (32g protein)", calories: 150, protein: 32, carbs: 5, fat: 2 },
-            { name: "Tofu (4oz)", calories: 94, protein: 10, carbs: 2, fat: 6 },
+            { name: "Protein Shake (whey, 1 scoop)", calories: 120, protein: 24, carbs: 3, fat: 1 },
+            { name: "Protein Shake (casein, 1 scoop)", calories: 120, protein: 24, carbs: 3, fat: 1 },
+            { name: "Protein Shake (plant, 1 scoop)", calories: 130, protein: 22, carbs: 6, fat: 2 },
+            { name: "Protein Shake (mass gainer)", calories: 650, protein: 32, carbs: 110, fat: 6 },
+            { name: "Tofu (firm, 4oz)", calories: 94, protein: 10, carbs: 2, fat: 6 },
+            { name: "Tofu (silken, 4oz)", calories: 55, protein: 5, carbs: 2, fat: 3 },
             { name: "Tempeh (4oz)", calories: 193, protein: 19, carbs: 9, fat: 11 },
             { name: "Edamame (1 cup)", calories: 120, protein: 11, carbs: 10, fat: 5 },
             { name: "Seitan (4oz)", calories: 190, protein: 25, carbs: 8, fat: 2 },
+            { name: "Beyond Burger (1 patty)", calories: 230, protein: 20, carbs: 5, fat: 14 },
+            { name: "Impossible Burger (1 patty)", calories: 240, protein: 19, carbs: 9, fat: 14 },
+            { name: "Veggie Burger (1 patty)", calories: 124, protein: 11, carbs: 10, fat: 4 },
 
             // Beans & Legumes
             { name: "Lentils (1 cup cooked)", calories: 230, protein: 18, carbs: 40, fat: 1 },
@@ -2854,19 +2931,45 @@
             { name: "Chickpeas (1 cup cooked)", calories: 269, protein: 15, carbs: 45, fat: 4 },
             { name: "Kidney Beans (1 cup cooked)", calories: 225, protein: 15, carbs: 40, fat: 1 },
             { name: "Pinto Beans (1 cup cooked)", calories: 245, protein: 15, carbs: 45, fat: 1 },
+            { name: "Navy Beans (1 cup cooked)", calories: 255, protein: 15, carbs: 47, fat: 1 },
+            { name: "Lima Beans (1 cup cooked)", calories: 216, protein: 15, carbs: 39, fat: 1 },
+            { name: "Cannellini Beans (1 cup cooked)", calories: 225, protein: 15, carbs: 40, fat: 1 },
+            { name: "Split Peas (1 cup cooked)", calories: 231, protein: 16, carbs: 41, fat: 1 },
+            { name: "Black-Eyed Peas (1 cup cooked)", calories: 198, protein: 13, carbs: 36, fat: 1 },
+            { name: "Hummus (2 tbsp)", calories: 70, protein: 2, carbs: 6, fat: 5 },
             { name: "Peanut Butter (2 tbsp)", calories: 188, protein: 8, carbs: 6, fat: 16 },
+            { name: "Almond Butter (2 tbsp)", calories: 196, protein: 7, carbs: 6, fat: 18 },
+            { name: "Cashew Butter (2 tbsp)", calories: 188, protein: 6, carbs: 9, fat: 16 },
+            { name: "Sunflower Seed Butter (2 tbsp)", calories: 200, protein: 7, carbs: 7, fat: 16 },
             { name: "Almonds (1oz)", calories: 164, protein: 6, carbs: 6, fat: 14 },
-            { name: "Walnuts (1oz)", calories: 185, protein: 4, carbs: 4, fat: 18 }
+            { name: "Walnuts (1oz)", calories: 185, protein: 4, carbs: 4, fat: 18 },
+            { name: "Hemp Seeds (3 tbsp)", calories: 166, protein: 10, carbs: 3, fat: 15 },
+            { name: "Chia Seeds (2 tbsp)", calories: 137, protein: 5, carbs: 12, fat: 9 },
+            { name: "Flax Seeds (2 tbsp)", calories: 110, protein: 4, carbs: 6, fat: 9 },
+            { name: "Pumpkin Seeds (1oz)", calories: 151, protein: 7, carbs: 5, fat: 13 },
+            { name: "Sunflower Seeds (1oz)", calories: 165, protein: 6, carbs: 7, fat: 14 }
           ],
           carbs: [
             // Grains & Cereals
             { name: "Brown Rice (1 cup cooked)", calories: 216, protein: 5, carbs: 44, fat: 2 },
             { name: "White Rice (1 cup cooked)", calories: 205, protein: 4, carbs: 44, fat: 0 },
+            { name: "Jasmine Rice (1 cup cooked)", calories: 205, protein: 4, carbs: 45, fat: 0 },
+            { name: "Basmati Rice (1 cup cooked)", calories: 210, protein: 4, carbs: 46, fat: 0 },
+            { name: "Wild Rice (1 cup cooked)", calories: 166, protein: 7, carbs: 35, fat: 1 },
+            { name: "Fried Rice (1 cup)", calories: 238, protein: 6, carbs: 34, fat: 9 },
             { name: "Quinoa (1 cup cooked)", calories: 222, protein: 8, carbs: 39, fat: 4 },
             { name: "Oatmeal (1 cup cooked)", calories: 147, protein: 5, carbs: 27, fat: 3 },
             { name: "Steel Cut Oats (1 cup cooked)", calories: 150, protein: 5, carbs: 27, fat: 3 },
+            { name: "Overnight Oats (1 cup)", calories: 210, protein: 8, carbs: 36, fat: 5 },
             { name: "Whole Wheat Pasta (1 cup cooked)", calories: 174, protein: 7, carbs: 37, fat: 1 },
             { name: "White Pasta (1 cup cooked)", calories: 157, protein: 6, carbs: 31, fat: 1 },
+            { name: "Penne Pasta (1 cup cooked)", calories: 157, protein: 6, carbs: 31, fat: 1 },
+            { name: "Spaghetti (1 cup cooked)", calories: 157, protein: 6, carbs: 31, fat: 1 },
+            { name: "Egg Noodles (1 cup cooked)", calories: 221, protein: 7, carbs: 40, fat: 3 },
+            { name: "Rice Noodles (1 cup cooked)", calories: 192, protein: 2, carbs: 44, fat: 0 },
+            { name: "Ramen Noodles (1 cup cooked)", calories: 188, protein: 5, carbs: 27, fat: 7 },
+            { name: "Udon Noodles (1 cup cooked)", calories: 190, protein: 6, carbs: 40, fat: 1 },
+            { name: "Soba Noodles (1 cup cooked)", calories: 113, protein: 6, carbs: 24, fat: 0 },
             { name: "Barley (1 cup cooked)", calories: 193, protein: 4, carbs: 44, fat: 1 },
             { name: "Farro (1 cup cooked)", calories: 185, protein: 7, carbs: 37, fat: 1 },
             { name: "Couscous (1 cup cooked)", calories: 176, protein: 6, carbs: 36, fat: 0 },
@@ -2874,65 +2977,260 @@
             { name: "Buckwheat (1 cup cooked)", calories: 155, protein: 6, carbs: 33, fat: 1 },
             { name: "Millet (1 cup cooked)", calories: 207, protein: 6, carbs: 41, fat: 2 },
             { name: "Amaranth (1 cup cooked)", calories: 251, protein: 9, carbs: 46, fat: 4 },
+            { name: "Polenta (1 cup cooked)", calories: 145, protein: 3, carbs: 32, fat: 1 },
+            { name: "Grits (1 cup cooked)", calories: 143, protein: 3, carbs: 31, fat: 1 },
 
             // Bread & Bakery
             { name: "Whole Wheat Bread (2 slices)", calories: 140, protein: 6, carbs: 24, fat: 2 },
             { name: "White Bread (2 slices)", calories: 133, protein: 4, carbs: 26, fat: 1 },
-            { name: "Bagel (medium)", calories: 289, protein: 11, carbs: 56, fat: 2 },
+            { name: "Sourdough Bread (2 slices)", calories: 154, protein: 6, carbs: 30, fat: 1 },
+            { name: "Rye Bread (2 slices)", calories: 166, protein: 6, carbs: 31, fat: 2 },
+            { name: "Pumpernickel Bread (2 slices)", calories: 160, protein: 6, carbs: 30, fat: 2 },
+            { name: "Multigrain Bread (2 slices)", calories: 138, protein: 6, carbs: 24, fat: 2 },
+            { name: "Ciabatta Bread (1 roll)", calories: 210, protein: 7, carbs: 40, fat: 3 },
+            { name: "Focaccia Bread (1 piece)", calories: 230, protein: 6, carbs: 30, fat: 10 },
+            { name: "Naan Bread (1 piece)", calories: 262, protein: 9, carbs: 45, fat: 5 },
+            { name: "Baguette (4 inches)", calories: 185, protein: 7, carbs: 36, fat: 1 },
+            { name: "Croissant (medium)", calories: 231, protein: 5, carbs: 26, fat: 12 },
+            { name: "Dinner Roll (1 roll)", calories: 87, protein: 3, carbs: 15, fat: 2 },
+            { name: "Brioche Bun (1 bun)", calories: 240, protein: 7, carbs: 34, fat: 9 },
+            { name: "Hamburger Bun (1 bun)", calories: 140, protein: 4, carbs: 26, fat: 2 },
+            { name: "Hot Dog Bun (1 bun)", calories: 120, protein: 4, carbs: 22, fat: 2 },
+            { name: "Bagel (plain, medium)", calories: 289, protein: 11, carbs: 56, fat: 2 },
+            { name: "Bagel (everything, medium)", calories: 300, protein: 12, carbs: 56, fat: 3 },
             { name: "English Muffin", calories: 134, protein: 5, carbs: 27, fat: 1 },
             { name: "Pita Bread (small)", calories: 165, protein: 6, carbs: 33, fat: 1 },
+            { name: "Pita Bread (whole wheat)", calories: 170, protein: 7, carbs: 35, fat: 2 },
+            { name: "Tortilla (large flour)", calories: 210, protein: 6, carbs: 36, fat: 5 },
             { name: "Tortilla (medium flour)", calories: 146, protein: 4, carbs: 24, fat: 4 },
             { name: "Tortilla (medium corn)", calories: 52, protein: 1, carbs: 11, fat: 1 },
+            { name: "Tortilla (low carb)", calories: 60, protein: 5, carbs: 11, fat: 2 },
+            { name: "Wrap (spinach, large)", calories: 180, protein: 6, carbs: 32, fat: 4 },
+            { name: "Flatbread (1 piece)", calories: 180, protein: 6, carbs: 30, fat: 4 },
+            { name: "Cornbread (1 piece)", calories: 173, protein: 4, carbs: 29, fat: 5 },
+            { name: "Biscuit (medium)", calories: 166, protein: 3, carbs: 22, fat: 7 },
 
             // Potatoes & Root Vegetables
             { name: "Sweet Potato (medium)", calories: 103, protein: 2, carbs: 24, fat: 0 },
             { name: "White Potato (medium)", calories: 161, protein: 4, carbs: 37, fat: 0 },
             { name: "Baked Potato (medium)", calories: 161, protein: 4, carbs: 37, fat: 0 },
+            { name: "Baked Potato with Butter", calories: 250, protein: 5, carbs: 37, fat: 10 },
+            { name: "Mashed Potatoes (1 cup)", calories: 237, protein: 4, carbs: 35, fat: 9 },
+            { name: "French Fries (medium serving)", calories: 365, protein: 4, carbs: 44, fat: 17 },
+            { name: "Hash Browns (1 cup)", calories: 326, protein: 3, carbs: 35, fat: 20 },
+            { name: "Tater Tots (10 pieces)", calories: 170, protein: 2, carbs: 20, fat: 9 },
+            { name: "Potato Salad (1 cup)", calories: 358, protein: 7, carbs: 28, fat: 21 },
             { name: "Corn (1 cup)", calories: 132, protein: 5, carbs: 29, fat: 2 },
+            { name: "Corn on the Cob (1 ear)", calories: 90, protein: 3, carbs: 19, fat: 1 },
             { name: "Peas (1 cup cooked)", calories: 134, protein: 9, carbs: 25, fat: 1 },
-
-            // Fruits
-            { name: "Banana", calories: 105, protein: 1, carbs: 27, fat: 0 },
-            { name: "Apple", calories: 95, protein: 0, carbs: 25, fat: 0 },
-            { name: "Orange", calories: 62, protein: 1, carbs: 15, fat: 0 },
-            { name: "Strawberries (1 cup)", calories: 49, protein: 1, carbs: 12, fat: 0 },
-            { name: "Blueberries (1 cup)", calories: 84, protein: 1, carbs: 21, fat: 0 },
-            { name: "Grapes (1 cup)", calories: 104, protein: 1, carbs: 27, fat: 0 },
-            { name: "Pineapple (1 cup)", calories: 82, protein: 1, carbs: 22, fat: 0 },
-            { name: "Mango (1 cup)", calories: 99, protein: 1, carbs: 25, fat: 1 },
-            { name: "Kiwi", calories: 46, protein: 1, carbs: 11, fat: 0 },
-            { name: "Pear", calories: 101, protein: 1, carbs: 27, fat: 0 }
+            { name: "Yams (1 cup cooked)", calories: 158, protein: 2, carbs: 37, fat: 0 },
+            { name: "Plantain (1 medium)", calories: 220, protein: 2, carbs: 57, fat: 1 },
+            { name: "Taro (1 cup cooked)", calories: 187, protein: 1, carbs: 46, fat: 0 },
+            { name: "Parsnips (1 cup cooked)", calories: 111, protein: 2, carbs: 27, fat: 0 },
+            { name: "Turnips (1 cup cooked)", calories: 34, protein: 1, carbs: 8, fat: 0 },
+            { name: "Rutabaga (1 cup cooked)", calories: 51, protein: 2, carbs: 12, fat: 0 }
           ],
           vegetables: [
             { name: "Broccoli (1 cup)", calories: 31, protein: 3, carbs: 6, fat: 0 },
-            { name: "Spinach (2 cups)", calories: 14, protein: 2, carbs: 2, fat: 0 },
-            { name: "Kale (2 cups)", calories: 66, protein: 5, carbs: 11, fat: 1 },
+            { name: "Broccoli (steamed, 1 cup)", calories: 55, protein: 4, carbs: 11, fat: 1 },
+            { name: "Broccolini (1 cup)", calories: 35, protein: 3, carbs: 6, fat: 0 },
+            { name: "Spinach (raw, 2 cups)", calories: 14, protein: 2, carbs: 2, fat: 0 },
+            { name: "Spinach (cooked, 1 cup)", calories: 41, protein: 5, carbs: 7, fat: 0 },
+            { name: "Kale (raw, 2 cups)", calories: 66, protein: 5, carbs: 11, fat: 1 },
+            { name: "Kale (cooked, 1 cup)", calories: 36, protein: 2, carbs: 7, fat: 1 },
             { name: "Mixed Greens Salad (2 cups)", calories: 20, protein: 2, carbs: 4, fat: 0 },
             { name: "Romaine Lettuce (2 cups)", calories: 16, protein: 1, carbs: 3, fat: 0 },
-            { name: "Carrots (1 cup)", calories: 50, protein: 1, carbs: 12, fat: 0 },
-            { name: "Bell Peppers (1 cup)", calories: 24, protein: 1, carbs: 6, fat: 0 },
+            { name: "Iceberg Lettuce (2 cups)", calories: 14, protein: 1, carbs: 3, fat: 0 },
+            { name: "Carrots (1 cup raw)", calories: 50, protein: 1, carbs: 12, fat: 0 },
+            { name: "Carrots (1 cup cooked)", calories: 55, protein: 1, carbs: 13, fat: 0 },
+            { name: "Baby Carrots (10 pieces)", calories: 35, protein: 1, carbs: 8, fat: 0 },
+            { name: "Bell Pepper (red, 1 cup)", calories: 31, protein: 1, carbs: 7, fat: 0 },
+            { name: "Bell Pepper (green, 1 cup)", calories: 24, protein: 1, carbs: 6, fat: 0 },
+            { name: "Jalapeño (1 pepper)", calories: 4, protein: 0, carbs: 1, fat: 0 },
             { name: "Zucchini (1 cup)", calories: 20, protein: 1, carbs: 4, fat: 1 },
+            { name: "Yellow Squash (1 cup)", calories: 20, protein: 1, carbs: 4, fat: 0 },
+            { name: "Spaghetti Squash (1 cup)", calories: 42, protein: 1, carbs: 10, fat: 0 },
+            { name: "Acorn Squash (1 cup)", calories: 56, protein: 1, carbs: 15, fat: 0 },
+            { name: "Butternut Squash (1 cup)", calories: 82, protein: 2, carbs: 22, fat: 0 },
             { name: "Tomatoes (1 medium)", calories: 22, protein: 1, carbs: 5, fat: 0 },
             { name: "Cherry Tomatoes (1 cup)", calories: 27, protein: 1, carbs: 6, fat: 0 },
+            { name: "Sun-Dried Tomatoes (1oz)", calories: 74, protein: 4, carbs: 16, fat: 1 },
             { name: "Cucumber (1 cup)", calories: 16, protein: 1, carbs: 4, fat: 0 },
-            { name: "Cauliflower (1 cup)", calories: 25, protein: 2, carbs: 5, fat: 0 },
+            { name: "Cauliflower (1 cup raw)", calories: 25, protein: 2, carbs: 5, fat: 0 },
+            { name: "Cauliflower Rice (1 cup)", calories: 25, protein: 2, carbs: 5, fat: 0 },
             { name: "Brussels Sprouts (1 cup)", calories: 65, protein: 4, carbs: 13, fat: 1 },
             { name: "Asparagus (1 cup)", calories: 27, protein: 3, carbs: 5, fat: 0 },
             { name: "Green Beans (1 cup)", calories: 34, protein: 2, carbs: 8, fat: 0 },
-            { name: "Mushrooms (1 cup)", calories: 21, protein: 2, carbs: 3, fat: 0 },
+            { name: "Snap Peas (1 cup)", calories: 41, protein: 3, carbs: 7, fat: 0 },
+            { name: "Snow Peas (1 cup)", calories: 26, protein: 2, carbs: 5, fat: 0 },
+            { name: "Mushrooms (white, 1 cup)", calories: 21, protein: 2, carbs: 3, fat: 0 },
+            { name: "Mushrooms (portobello, 1 cap)", calories: 18, protein: 2, carbs: 3, fat: 0 },
+            { name: "Mushrooms (shiitake, 1 cup)", calories: 34, protein: 1, carbs: 7, fat: 0 },
+            { name: "Mushrooms (cremini, 1 cup)", calories: 27, protein: 3, carbs: 4, fat: 0 },
             { name: "Onion (1 medium)", calories: 44, protein: 1, carbs: 10, fat: 0 },
+            { name: "Red Onion (1 medium)", calories: 44, protein: 1, carbs: 10, fat: 0 },
+            { name: "Green Onions (1/4 cup)", calories: 8, protein: 0, carbs: 2, fat: 0 },
+            { name: "Shallots (1 tbsp)", calories: 7, protein: 0, carbs: 2, fat: 0 },
+            { name: "Leek (1 medium)", calories: 54, protein: 1, carbs: 13, fat: 0 },
             { name: "Garlic (1 clove)", calories: 4, protein: 0, carbs: 1, fat: 0 },
             { name: "Celery (1 cup)", calories: 16, protein: 1, carbs: 3, fat: 0 },
             { name: "Beets (1 cup cooked)", calories: 75, protein: 3, carbs: 17, fat: 0 },
-            { name: "Sweet Potato (medium)", calories: 103, protein: 2, carbs: 24, fat: 0 },
-            { name: "Squash (butternut, 1 cup)", calories: 82, protein: 2, carbs: 22, fat: 0 },
             { name: "Eggplant (1 cup)", calories: 35, protein: 1, carbs: 8, fat: 0 },
             { name: "Artichoke (medium)", calories: 120, protein: 7, carbs: 27, fat: 0 },
+            { name: "Artichoke Hearts (1/2 cup)", calories: 45, protein: 2, carbs: 10, fat: 0 },
             { name: "Arugula (2 cups)", calories: 10, protein: 1, carbs: 2, fat: 0 },
             { name: "Bok Choy (1 cup)", calories: 13, protein: 2, carbs: 2, fat: 0 },
-            { name: "Collard Greens (1 cup cooked)", calories: 36, protein: 3, carbs: 7, fat: 1 }
+            { name: "Collard Greens (1 cup cooked)", calories: 36, protein: 3, carbs: 7, fat: 1 },
+            { name: "Swiss Chard (1 cup cooked)", calories: 35, protein: 3, carbs: 7, fat: 0 },
+            { name: "Watercress (1 cup)", calories: 4, protein: 1, carbs: 0, fat: 0 },
+            { name: "Cabbage (green, 1 cup)", calories: 22, protein: 1, carbs: 5, fat: 0 },
+            { name: "Cabbage (red, 1 cup)", calories: 28, protein: 1, carbs: 7, fat: 0 },
+            { name: "Coleslaw (1 cup)", calories: 83, protein: 1, carbs: 15, fat: 3 },
+            { name: "Sauerkraut (1 cup)", calories: 27, protein: 1, carbs: 6, fat: 0 },
+            { name: "Kimchi (1 cup)", calories: 23, protein: 2, carbs: 4, fat: 1 },
+            { name: "Radishes (1 cup)", calories: 19, protein: 1, carbs: 4, fat: 0 },
+            { name: "Daikon Radish (1 cup)", calories: 21, protein: 1, carbs: 5, fat: 0 },
+            { name: "Jicama (1 cup)", calories: 46, protein: 1, carbs: 11, fat: 0 },
+            { name: "Okra (1 cup)", calories: 33, protein: 2, carbs: 7, fat: 0 },
+            { name: "Bamboo Shoots (1 cup)", calories: 14, protein: 2, carbs: 2, fat: 0 },
+            { name: "Bean Sprouts (1 cup)", calories: 31, protein: 3, carbs: 6, fat: 0 },
+            { name: "Water Chestnuts (1/2 cup)", calories: 60, protein: 1, carbs: 15, fat: 0 },
+            { name: "Hearts of Palm (1 cup)", calories: 41, protein: 4, carbs: 7, fat: 1 },
+            { name: "Seaweed/Nori (1 sheet)", calories: 5, protein: 1, carbs: 1, fat: 0 },
+            { name: "Corn (canned, 1 cup)", calories: 133, protein: 4, carbs: 30, fat: 2 }
+          ],
+          fruits: [
+            { name: "Avocado (medium)", calories: 234, protein: 3, carbs: 12, fat: 21 },
+            { name: "Avocado (1/2 medium)", calories: 117, protein: 1, carbs: 6, fat: 11 },
+            { name: "Apple (medium)", calories: 95, protein: 0, carbs: 25, fat: 0 },
+            { name: "Apple (small)", calories: 77, protein: 0, carbs: 21, fat: 0 },
+            { name: "Banana (medium)", calories: 105, protein: 1, carbs: 27, fat: 0 },
+            { name: "Banana (small)", calories: 72, protein: 1, carbs: 19, fat: 0 },
+            { name: "Orange (medium)", calories: 62, protein: 1, carbs: 15, fat: 0 },
+            { name: "Clementine", calories: 35, protein: 1, carbs: 9, fat: 0 },
+            { name: "Tangerine", calories: 47, protein: 1, carbs: 12, fat: 0 },
+            { name: "Grapefruit (half)", calories: 52, protein: 1, carbs: 13, fat: 0 },
+            { name: "Grapes (red, 1 cup)", calories: 104, protein: 1, carbs: 27, fat: 0 },
+            { name: "Grapes (green, 1 cup)", calories: 104, protein: 1, carbs: 27, fat: 0 },
+            { name: "Strawberries (1 cup)", calories: 49, protein: 1, carbs: 12, fat: 0 },
+            { name: "Blueberries (1 cup)", calories: 84, protein: 1, carbs: 21, fat: 0 },
+            { name: "Raspberries (1 cup)", calories: 64, protein: 1, carbs: 15, fat: 0 },
+            { name: "Blackberries (1 cup)", calories: 62, protein: 2, carbs: 14, fat: 1 },
+            { name: "Cranberries (1 cup raw)", calories: 46, protein: 0, carbs: 12, fat: 0 },
+            { name: "Mixed Berries (1 cup)", calories: 70, protein: 1, carbs: 17, fat: 0 },
+            { name: "Pineapple (1 cup)", calories: 82, protein: 1, carbs: 22, fat: 0 },
+            { name: "Mango (1 cup)", calories: 99, protein: 1, carbs: 25, fat: 1 },
+            { name: "Papaya (1 cup)", calories: 55, protein: 1, carbs: 14, fat: 0 },
+            { name: "Guava (1 medium)", calories: 37, protein: 1, carbs: 8, fat: 1 },
+            { name: "Passion Fruit (1 medium)", calories: 17, protein: 0, carbs: 4, fat: 0 },
+            { name: "Dragon Fruit (1 medium)", calories: 60, protein: 1, carbs: 13, fat: 0 },
+            { name: "Star Fruit (1 medium)", calories: 28, protein: 1, carbs: 6, fat: 0 },
+            { name: "Lychee (10 pieces)", calories: 66, protein: 1, carbs: 17, fat: 0 },
+            { name: "Jackfruit (1 cup)", calories: 143, protein: 3, carbs: 35, fat: 1 },
+            { name: "Kiwi", calories: 42, protein: 1, carbs: 10, fat: 0 },
+            { name: "Pear (medium)", calories: 101, protein: 1, carbs: 27, fat: 0 },
+            { name: "Peach (medium)", calories: 59, protein: 1, carbs: 14, fat: 0 },
+            { name: "Nectarine (medium)", calories: 62, protein: 2, carbs: 15, fat: 0 },
+            { name: "Plum (medium)", calories: 30, protein: 0, carbs: 8, fat: 0 },
+            { name: "Apricot (1 medium)", calories: 17, protein: 0, carbs: 4, fat: 0 },
+            { name: "Cherries (1 cup)", calories: 87, protein: 1, carbs: 22, fat: 0 },
+            { name: "Watermelon (1 cup)", calories: 46, protein: 1, carbs: 12, fat: 0 },
+            { name: "Cantaloupe (1 cup)", calories: 54, protein: 1, carbs: 13, fat: 0 },
+            { name: "Honeydew (1 cup)", calories: 64, protein: 1, carbs: 16, fat: 0 },
+            { name: "Coconut (fresh, 1oz)", calories: 99, protein: 1, carbs: 4, fat: 9 },
+            { name: "Coconut (dried, 1oz)", calories: 185, protein: 2, carbs: 7, fat: 18 },
+            { name: "Pomegranate (seeds, 1/2 cup)", calories: 72, protein: 1, carbs: 16, fat: 1 },
+            { name: "Fig (fresh, 1 medium)", calories: 37, protein: 0, carbs: 10, fat: 0 },
+            { name: "Fig (dried, 3 pieces)", calories: 95, protein: 1, carbs: 23, fat: 0 },
+            { name: "Dates (Medjool, 1 date)", calories: 66, protein: 0, carbs: 18, fat: 0 },
+            { name: "Raisins (1/4 cup)", calories: 108, protein: 1, carbs: 29, fat: 0 },
+            { name: "Dried Cranberries (1/4 cup)", calories: 123, protein: 0, carbs: 33, fat: 1 },
+            { name: "Dried Apricots (1/4 cup)", calories: 78, protein: 1, carbs: 20, fat: 0 },
+            { name: "Dried Mango (1/4 cup)", calories: 120, protein: 1, carbs: 28, fat: 0 },
+            { name: "Prunes (5 pieces)", calories: 114, protein: 1, carbs: 30, fat: 0 },
+            { name: "Applesauce (1/2 cup)", calories: 51, protein: 0, carbs: 14, fat: 0 },
+            { name: "Fruit Salad (1 cup)", calories: 90, protein: 1, carbs: 23, fat: 0 },
+            { name: "Lemon", calories: 17, protein: 1, carbs: 5, fat: 0 },
+            { name: "Lime", calories: 20, protein: 0, carbs: 7, fat: 0 },
+            { name: "Persimmon (1 medium)", calories: 118, protein: 1, carbs: 31, fat: 0 }
+          ],
+          dairy: [
+            // Milk
+            { name: "Milk (whole, 8oz)", calories: 146, protein: 8, carbs: 11, fat: 8 },
+            { name: "Milk (2% fat, 8oz)", calories: 122, protein: 8, carbs: 12, fat: 5 },
+            { name: "Milk (1% fat, 8oz)", calories: 102, protein: 8, carbs: 12, fat: 2 },
+            { name: "Milk (skim, 8oz)", calories: 83, protein: 8, carbs: 12, fat: 0 },
+            { name: "Chocolate Milk (8oz)", calories: 208, protein: 8, carbs: 26, fat: 8 },
+            { name: "Buttermilk (8oz)", calories: 98, protein: 8, carbs: 12, fat: 3 },
+            { name: "Heavy Cream (2 tbsp)", calories: 101, protein: 1, carbs: 1, fat: 11 },
+            { name: "Half and Half (2 tbsp)", calories: 40, protein: 1, carbs: 1, fat: 4 },
+            { name: "Whipped Cream (2 tbsp)", calories: 15, protein: 0, carbs: 1, fat: 1 },
+            { name: "Evaporated Milk (2 tbsp)", calories: 40, protein: 2, carbs: 3, fat: 2 },
+            { name: "Condensed Milk (2 tbsp)", calories: 130, protein: 3, carbs: 22, fat: 3 },
+
+            // Plant Milks
+            { name: "Almond Milk (unsweetened, 8oz)", calories: 30, protein: 1, carbs: 2, fat: 3 },
+            { name: "Almond Milk (sweetened, 8oz)", calories: 60, protein: 1, carbs: 8, fat: 3 },
+            { name: "Soy Milk (unsweetened, 8oz)", calories: 80, protein: 7, carbs: 4, fat: 4 },
+            { name: "Oat Milk (unsweetened, 8oz)", calories: 50, protein: 0, carbs: 9, fat: 2 },
+            { name: "Oat Milk (original, 8oz)", calories: 120, protein: 3, carbs: 16, fat: 5 },
+            { name: "Coconut Milk (8oz)", calories: 45, protein: 0, carbs: 3, fat: 5 },
+            { name: "Coconut Milk (canned, 1/4 cup)", calories: 120, protein: 1, carbs: 2, fat: 12 },
+            { name: "Cashew Milk (unsweetened, 8oz)", calories: 25, protein: 1, carbs: 1, fat: 2 },
+            { name: "Rice Milk (8oz)", calories: 115, protein: 1, carbs: 22, fat: 2 },
+            { name: "Pea Milk (8oz)", calories: 70, protein: 8, carbs: 0, fat: 5 },
+
+            // Cheese
+            { name: "Cheddar Cheese (1oz)", calories: 113, protein: 7, carbs: 1, fat: 9 },
+            { name: "Mozzarella Cheese (1oz)", calories: 85, protein: 6, carbs: 1, fat: 6 },
+            { name: "Fresh Mozzarella (1oz)", calories: 70, protein: 5, carbs: 1, fat: 5 },
+            { name: "Swiss Cheese (1oz)", calories: 111, protein: 8, carbs: 1, fat: 9 },
+            { name: "Parmesan Cheese (1oz)", calories: 111, protein: 10, carbs: 1, fat: 7 },
+            { name: "Parmesan (grated, 2 tbsp)", calories: 42, protein: 4, carbs: 0, fat: 3 },
+            { name: "Brie Cheese (1oz)", calories: 95, protein: 6, carbs: 0, fat: 8 },
+            { name: "Gouda Cheese (1oz)", calories: 101, protein: 7, carbs: 1, fat: 8 },
+            { name: "Blue Cheese (1oz)", calories: 100, protein: 6, carbs: 1, fat: 8 },
+            { name: "Feta Cheese (1oz)", calories: 75, protein: 4, carbs: 1, fat: 6 },
+            { name: "Goat Cheese (1oz)", calories: 75, protein: 5, carbs: 0, fat: 6 },
+            { name: "Provolone Cheese (1oz)", calories: 98, protein: 7, carbs: 1, fat: 7 },
+            { name: "Pepper Jack Cheese (1oz)", calories: 110, protein: 7, carbs: 0, fat: 9 },
+            { name: "Colby Jack Cheese (1oz)", calories: 110, protein: 7, carbs: 1, fat: 9 },
+            { name: "Monterey Jack Cheese (1oz)", calories: 106, protein: 7, carbs: 0, fat: 9 },
+            { name: "American Cheese (1 slice)", calories: 66, protein: 4, carbs: 1, fat: 5 },
+            { name: "Ricotta Cheese (1/4 cup)", calories: 107, protein: 7, carbs: 2, fat: 8 },
+            { name: "Ricotta (part-skim, 1/4 cup)", calories: 86, protein: 7, carbs: 3, fat: 5 },
+            { name: "Mascarpone Cheese (2 tbsp)", calories: 120, protein: 2, carbs: 1, fat: 13 },
+            { name: "Cream Cheese (2 tbsp)", calories: 99, protein: 2, carbs: 1, fat: 10 },
+            { name: "Cream Cheese (lite, 2 tbsp)", calories: 60, protein: 3, carbs: 2, fat: 5 },
+            { name: "Queso Fresco (1oz)", calories: 80, protein: 5, carbs: 1, fat: 6 },
+            { name: "Cotija Cheese (1oz)", calories: 100, protein: 6, carbs: 1, fat: 8 },
+            { name: "Paneer (1oz)", calories: 83, protein: 6, carbs: 1, fat: 6 },
+            { name: "Halloumi (1oz)", calories: 90, protein: 7, carbs: 1, fat: 7 },
+
+            // Yogurt
+            { name: "Greek Yogurt (plain, 6oz)", calories: 100, protein: 18, carbs: 6, fat: 0 },
+            { name: "Greek Yogurt (whole milk, 6oz)", calories: 150, protein: 15, carbs: 7, fat: 6 },
+            { name: "Greek Yogurt (flavored, 6oz)", calories: 140, protein: 15, carbs: 16, fat: 2 },
+            { name: "Regular Yogurt (plain, 6oz)", calories: 100, protein: 4, carbs: 7, fat: 5 },
+            { name: "Yogurt (fruit on bottom, 6oz)", calories: 150, protein: 6, carbs: 25, fat: 2 },
+            { name: "Skyr (Icelandic yogurt, 6oz)", calories: 100, protein: 17, carbs: 7, fat: 0 },
+            { name: "Kefir (8oz)", calories: 104, protein: 9, carbs: 12, fat: 2 },
+
+            // Other Dairy
+            { name: "Ice Cream (vanilla, 1/2 cup)", calories: 137, protein: 2, carbs: 16, fat: 7 },
+            { name: "Ice Cream (chocolate, 1/2 cup)", calories: 143, protein: 3, carbs: 19, fat: 7 },
+            { name: "Frozen Yogurt (1/2 cup)", calories: 110, protein: 3, carbs: 20, fat: 2 },
+            { name: "Gelato (1/2 cup)", calories: 160, protein: 3, carbs: 22, fat: 7 },
+            { name: "Sorbet (1/2 cup)", calories: 130, protein: 0, carbs: 32, fat: 0 },
+            { name: "Cottage Cheese (full fat, 4oz)", calories: 110, protein: 13, carbs: 3, fat: 5 },
+            { name: "Cottage Cheese (low-fat, 4oz)", calories: 90, protein: 14, carbs: 3, fat: 2 },
+            { name: "Sour Cream (2 tbsp)", calories: 46, protein: 1, carbs: 1, fat: 5 },
+            { name: "Sour Cream (light, 2 tbsp)", calories: 35, protein: 1, carbs: 2, fat: 3 },
+            { name: "Butter (1 tbsp)", calories: 102, protein: 0, carbs: 0, fat: 12 },
+            { name: "Ghee (1 tbsp)", calories: 120, protein: 0, carbs: 0, fat: 14 }
           ],
           snacks: [
+            // Nuts
             { name: "Almonds (1oz)", calories: 164, protein: 6, carbs: 6, fat: 14 },
             { name: "Walnuts (1oz)", calories: 185, protein: 4, carbs: 4, fat: 18 },
             { name: "Peanuts (1oz)", calories: 161, protein: 7, carbs: 6, fat: 14 },
@@ -2940,70 +3238,590 @@
             { name: "Pistachios (1oz)", calories: 156, protein: 6, carbs: 8, fat: 12 },
             { name: "Brazil Nuts (1oz)", calories: 186, protein: 4, carbs: 3, fat: 19 },
             { name: "Macadamia Nuts (1oz)", calories: 204, protein: 2, carbs: 4, fat: 22 },
-            { name: "Greek Yogurt with Berries", calories: 150, protein: 20, carbs: 15, fat: 2 },
+            { name: "Pecans (1oz)", calories: 196, protein: 3, carbs: 4, fat: 20 },
+            { name: "Hazelnuts (1oz)", calories: 178, protein: 4, carbs: 5, fat: 17 },
+            { name: "Pine Nuts (1oz)", calories: 191, protein: 4, carbs: 4, fat: 19 },
+            { name: "Mixed Nuts (1oz)", calories: 175, protein: 5, carbs: 6, fat: 16 },
+            { name: "Coconut Chips (1oz)", calories: 185, protein: 2, carbs: 7, fat: 18 },
+
+            // Nut Butter Combos
             { name: "Apple with Peanut Butter", calories: 200, protein: 5, carbs: 25, fat: 10 },
             { name: "Banana with Almond Butter", calories: 190, protein: 4, carbs: 27, fat: 8 },
+            { name: "Celery with Peanut Butter", calories: 120, protein: 5, carbs: 5, fat: 9 },
+            { name: "Greek Yogurt with Berries", calories: 150, protein: 20, carbs: 15, fat: 2 },
+            { name: "Greek Yogurt with Granola", calories: 220, protein: 22, carbs: 22, fat: 5 },
+
+            // Bars
             { name: "Protein Bar", calories: 200, protein: 20, carbs: 20, fat: 5 },
-            { name: "Energy Bar", calories: 250, protein: 10, carbs: 30, fat: 8 },
-            { name: "Mixed Nuts (1oz)", calories: 175, protein: 5, carbs: 6, fat: 16 },
+            { name: "Energy Bar (Clif)", calories: 250, protein: 10, carbs: 44, fat: 6 },
+            { name: "RX Bar", calories: 210, protein: 12, carbs: 24, fat: 9 },
+            { name: "Kind Bar", calories: 200, protein: 6, carbs: 22, fat: 12 },
+            { name: "Larabar", calories: 220, protein: 5, carbs: 28, fat: 11 },
+            { name: "Nature Valley Granola Bar", calories: 190, protein: 3, carbs: 29, fat: 7 },
+            { name: "Quest Bar", calories: 190, protein: 21, carbs: 21, fat: 7 },
+            { name: "Built Bar", calories: 130, protein: 17, carbs: 15, fat: 3 },
+
+            // Salty Snacks
             { name: "Trail Mix (1oz)", calories: 140, protein: 4, carbs: 12, fat: 9 },
-            { name: "Dark Chocolate (1oz)", calories: 170, protein: 2, carbs: 13, fat: 12 },
-            { name: "Milk Chocolate (1oz)", calories: 235, protein: 3, carbs: 26, fat: 13 },
             { name: "Jerky (beef, 1oz)", calories: 116, protein: 9, carbs: 3, fat: 7 },
             { name: "Turkey Jerky (1oz)", calories: 100, protein: 12, carbs: 4, fat: 3 },
-            { name: "Rice Cakes (2 cakes)", calories: 70, protein: 1, carbs: 15, fat: 0 },
-            { name: "Popcorn (3 cups air-popped)", calories: 93, protein: 3, carbs: 19, fat: 1 },
-            { name: "Pretzels (1oz)", calories: 108, protein: 3, carbs: 22, fat: 1 },
-            { name: "Cheese Crackers (20 pieces)", calories: 151, protein: 3, carbs: 16, fat: 8 },
-            { name: "Granola (1/2 cup)", calories: 200, protein: 5, carbs: 25, fat: 8 },
-            { name: "Cereal (1 cup)", calories: 150, protein: 3, carbs: 28, fat: 2 },
             { name: "Chips (potato, 1oz)", calories: 152, protein: 2, carbs: 15, fat: 10 },
             { name: "Chips (tortilla, 1oz)", calories: 142, protein: 2, carbs: 18, fat: 7 },
-            { name: "Fruit Snacks (1oz)", calories: 100, protein: 0, carbs: 25, fat: 0 },
-            { name: "String Cheese", calories: 80, protein: 7, carbs: 1, fat: 6 }
+            { name: "Chips (pita, 1oz)", calories: 130, protein: 3, carbs: 19, fat: 5 },
+            { name: "Chips (veggie, 1oz)", calories: 150, protein: 1, carbs: 16, fat: 9 },
+            { name: "Chips (sweet potato, 1oz)", calories: 150, protein: 1, carbs: 15, fat: 9 },
+            { name: "Chips (kettle cooked, 1oz)", calories: 150, protein: 2, carbs: 15, fat: 9 },
+            { name: "Popcorn (3 cups air-popped)", calories: 93, protein: 3, carbs: 19, fat: 1 },
+            { name: "Popcorn (butter, 3 cups)", calories: 170, protein: 2, carbs: 20, fat: 10 },
+            { name: "Pretzels (1oz)", calories: 108, protein: 3, carbs: 22, fat: 1 },
+            { name: "Pretzels (soft, 1 medium)", calories: 380, protein: 10, carbs: 79, fat: 4 },
+            { name: "Cheese Crackers (20 pieces)", calories: 151, protein: 3, carbs: 16, fat: 8 },
+            { name: "Crackers (Wheat Thins, 16 pc)", calories: 140, protein: 3, carbs: 22, fat: 5 },
+            { name: "Crackers (Triscuit, 6 pc)", calories: 120, protein: 3, carbs: 20, fat: 4 },
+            { name: "Crackers (Ritz, 5 pc)", calories: 80, protein: 1, carbs: 10, fat: 4 },
+            { name: "Crackers (Graham, 2 sheets)", calories: 130, protein: 2, carbs: 24, fat: 3 },
+            { name: "Rice Cakes (2 cakes)", calories: 70, protein: 1, carbs: 15, fat: 0 },
+            { name: "Tortilla Chips & Salsa (10 chips)", calories: 170, protein: 2, carbs: 22, fat: 8 },
+            { name: "Chips & Guacamole (10 chips)", calories: 230, protein: 3, carbs: 20, fat: 15 },
+
+            // Sweet Snacks
+            { name: "Dark Chocolate (1oz)", calories: 170, protein: 2, carbs: 13, fat: 12 },
+            { name: "Milk Chocolate (1oz)", calories: 235, protein: 3, carbs: 26, fat: 13 },
+            { name: "White Chocolate (1oz)", calories: 153, protein: 2, carbs: 17, fat: 9 },
+            { name: "Chocolate Chips (2 tbsp)", calories: 140, protein: 1, carbs: 18, fat: 8 },
+            { name: "M&Ms (1.7oz pack)", calories: 240, protein: 3, carbs: 34, fat: 10 },
+            { name: "Snickers Bar", calories: 250, protein: 4, carbs: 33, fat: 12 },
+            { name: "Reese's Cups (2 pieces)", calories: 210, protein: 5, carbs: 24, fat: 13 },
+            { name: "Gummy Bears (17 pieces)", calories: 140, protein: 3, carbs: 34, fat: 0 },
+            { name: "Fruit Snacks (1 pouch)", calories: 80, protein: 0, carbs: 20, fat: 0 },
+            { name: "String Cheese", calories: 80, protein: 7, carbs: 1, fat: 6 },
+            { name: "Cheese Stick (Babybel)", calories: 70, protein: 5, carbs: 0, fat: 6 },
+
+            // Dips & Spreads as Snacks
+            { name: "Hummus with Veggies", calories: 120, protein: 4, carbs: 12, fat: 7 },
+            { name: "Hummus with Pita Chips", calories: 200, protein: 5, carbs: 25, fat: 10 },
+            { name: "Guacamole (2 tbsp)", calories: 50, protein: 1, carbs: 3, fat: 5 },
+            { name: "Salsa (2 tbsp)", calories: 10, protein: 0, carbs: 2, fat: 0 },
+            { name: "Tzatziki (2 tbsp)", calories: 35, protein: 1, carbs: 2, fat: 3 },
+
+            // Other
+            { name: "Granola (1/2 cup)", calories: 200, protein: 5, carbs: 25, fat: 8 },
+            { name: "Cereal (1 cup)", calories: 150, protein: 3, carbs: 28, fat: 2 },
+            { name: "Cereal (Cheerios, 1 cup)", calories: 100, protein: 3, carbs: 20, fat: 2 },
+            { name: "Cereal (Frosted Flakes, 1 cup)", calories: 140, protein: 1, carbs: 34, fat: 0 },
+            { name: "Dried Fruit Mix (1/4 cup)", calories: 110, protein: 1, carbs: 26, fat: 0 },
+            { name: "Edamame (shelled, 1/2 cup)", calories: 60, protein: 6, carbs: 5, fat: 3 },
+            { name: "Olives (10 medium)", calories: 40, protein: 0, carbs: 2, fat: 4 }
           ],
-          fruits: [
-            { name: "Avocado (medium)", calories: 234, protein: 3, carbs: 12, fat: 21 },
-            { name: "Apple", calories: 95, protein: 0, carbs: 25, fat: 0 },
-            { name: "Banana", calories: 105, protein: 1, carbs: 27, fat: 0 },
-            { name: "Orange", calories: 62, protein: 1, carbs: 15, fat: 0 },
-            { name: "Grapes (1 cup)", calories: 104, protein: 1, carbs: 27, fat: 0 },
-            { name: "Strawberries (1 cup)", calories: 49, protein: 1, carbs: 12, fat: 0 },
-            { name: "Blueberries (1 cup)", calories: 84, protein: 1, carbs: 21, fat: 0 },
-            { name: "Raspberries (1 cup)", calories: 64, protein: 1, carbs: 15, fat: 0 },
-            { name: "Blackberries (1 cup)", calories: 62, protein: 2, carbs: 14, fat: 1 },
-            { name: "Pineapple (1 cup)", calories: 82, protein: 1, carbs: 22, fat: 0 },
-            { name: "Mango (1 cup)", calories: 99, protein: 1, carbs: 25, fat: 1 },
-            { name: "Kiwi", calories: 42, protein: 1, carbs: 10, fat: 0 },
-            { name: "Pear", calories: 101, protein: 1, carbs: 27, fat: 0 },
-            { name: "Peach", calories: 59, protein: 1, carbs: 14, fat: 0 },
-            { name: "Plum", calories: 30, protein: 0, carbs: 8, fat: 0 },
-            { name: "Cherries (1 cup)", calories: 87, protein: 1, carbs: 22, fat: 0 },
-            { name: "Watermelon (1 cup)", calories: 46, protein: 1, carbs: 12, fat: 0 },
-            { name: "Cantaloupe (1 cup)", calories: 54, protein: 1, carbs: 13, fat: 0 },
-            { name: "Honeydew (1 cup)", calories: 64, protein: 1, carbs: 16, fat: 0 },
-            { name: "Lemon", calories: 17, protein: 1, carbs: 5, fat: 0 },
-            { name: "Lime", calories: 20, protein: 0, carbs: 7, fat: 0 }
+          beverages: [
+            // Coffee
+            { name: "Coffee (black, 8oz)", calories: 2, protein: 0, carbs: 0, fat: 0 },
+            { name: "Coffee with Cream (8oz)", calories: 52, protein: 1, carbs: 1, fat: 5 },
+            { name: "Coffee with Sugar (8oz)", calories: 30, protein: 0, carbs: 8, fat: 0 },
+            { name: "Espresso (1 shot)", calories: 3, protein: 0, carbs: 0, fat: 0 },
+            { name: "Espresso (double shot)", calories: 5, protein: 0, carbs: 1, fat: 0 },
+            { name: "Latte (12oz, whole milk)", calories: 180, protein: 10, carbs: 14, fat: 9 },
+            { name: "Latte (12oz, skim milk)", calories: 100, protein: 10, carbs: 14, fat: 0 },
+            { name: "Latte (12oz, oat milk)", calories: 140, protein: 3, carbs: 19, fat: 5 },
+            { name: "Latte (12oz, almond milk)", calories: 70, protein: 2, carbs: 8, fat: 3 },
+            { name: "Cappuccino (12oz)", calories: 120, protein: 8, carbs: 10, fat: 5 },
+            { name: "Mocha (12oz)", calories: 290, protein: 10, carbs: 35, fat: 12 },
+            { name: "Americano (12oz)", calories: 10, protein: 0, carbs: 2, fat: 0 },
+            { name: "Cold Brew Coffee (12oz)", calories: 5, protein: 0, carbs: 0, fat: 0 },
+            { name: "Iced Coffee (12oz, sweetened)", calories: 80, protein: 1, carbs: 20, fat: 0 },
+            { name: "Frappuccino (Grande)", calories: 380, protein: 5, carbs: 60, fat: 14 },
+            { name: "Flat White (12oz)", calories: 170, protein: 10, carbs: 13, fat: 9 },
+
+            // Tea
+            { name: "Tea (black, unsweetened, 8oz)", calories: 2, protein: 0, carbs: 0, fat: 0 },
+            { name: "Tea (green, unsweetened, 8oz)", calories: 2, protein: 0, carbs: 0, fat: 0 },
+            { name: "Tea (herbal, 8oz)", calories: 2, protein: 0, carbs: 0, fat: 0 },
+            { name: "Chai Latte (12oz)", calories: 190, protein: 6, carbs: 30, fat: 4 },
+            { name: "Matcha Latte (12oz)", calories: 160, protein: 6, carbs: 22, fat: 5 },
+            { name: "Iced Tea (sweetened, 12oz)", calories: 90, protein: 0, carbs: 23, fat: 0 },
+            { name: "Iced Tea (unsweetened, 12oz)", calories: 3, protein: 0, carbs: 1, fat: 0 },
+            { name: "Boba/Bubble Tea (16oz)", calories: 350, protein: 2, carbs: 68, fat: 8 },
+
+            // Juice
+            { name: "Orange Juice (8oz)", calories: 112, protein: 2, carbs: 26, fat: 0 },
+            { name: "Apple Juice (8oz)", calories: 114, protein: 0, carbs: 28, fat: 0 },
+            { name: "Cranberry Juice (8oz)", calories: 116, protein: 0, carbs: 30, fat: 0 },
+            { name: "Grape Juice (8oz)", calories: 152, protein: 1, carbs: 37, fat: 0 },
+            { name: "Grapefruit Juice (8oz)", calories: 96, protein: 1, carbs: 23, fat: 0 },
+            { name: "Pineapple Juice (8oz)", calories: 132, protein: 1, carbs: 32, fat: 0 },
+            { name: "Tomato Juice (8oz)", calories: 41, protein: 2, carbs: 10, fat: 0 },
+            { name: "V8 Vegetable Juice (8oz)", calories: 50, protein: 2, carbs: 10, fat: 0 },
+            { name: "Green Juice (pressed, 12oz)", calories: 120, protein: 2, carbs: 28, fat: 0 },
+            { name: "Carrot Juice (8oz)", calories: 94, protein: 2, carbs: 22, fat: 0 },
+            { name: "Beet Juice (8oz)", calories: 110, protein: 3, carbs: 26, fat: 0 },
+            { name: "Lemonade (8oz)", calories: 99, protein: 0, carbs: 26, fat: 0 },
+
+            // Smoothies
+            { name: "Fruit Smoothie (16oz)", calories: 250, protein: 4, carbs: 55, fat: 2 },
+            { name: "Green Smoothie (16oz)", calories: 180, protein: 5, carbs: 35, fat: 3 },
+            { name: "Protein Smoothie (16oz)", calories: 300, protein: 30, carbs: 35, fat: 5 },
+            { name: "Açaí Bowl (medium)", calories: 380, protein: 6, carbs: 65, fat: 12 },
+
+            // Soda & Soft Drinks
+            { name: "Coca-Cola (12oz can)", calories: 140, protein: 0, carbs: 39, fat: 0 },
+            { name: "Pepsi (12oz can)", calories: 150, protein: 0, carbs: 41, fat: 0 },
+            { name: "Sprite (12oz can)", calories: 140, protein: 0, carbs: 38, fat: 0 },
+            { name: "Dr Pepper (12oz can)", calories: 150, protein: 0, carbs: 40, fat: 0 },
+            { name: "Mountain Dew (12oz can)", calories: 170, protein: 0, carbs: 46, fat: 0 },
+            { name: "Ginger Ale (12oz can)", calories: 130, protein: 0, carbs: 34, fat: 0 },
+            { name: "Root Beer (12oz can)", calories: 152, protein: 0, carbs: 39, fat: 0 },
+            { name: "Diet Soda (12oz can)", calories: 0, protein: 0, carbs: 0, fat: 0 },
+            { name: "Sparkling Water (12oz)", calories: 0, protein: 0, carbs: 0, fat: 0 },
+            { name: "Tonic Water (8oz)", calories: 83, protein: 0, carbs: 22, fat: 0 },
+            { name: "Club Soda (12oz)", calories: 0, protein: 0, carbs: 0, fat: 0 },
+
+            // Energy & Sports Drinks
+            { name: "Gatorade (20oz)", calories: 140, protein: 0, carbs: 36, fat: 0 },
+            { name: "Powerade (20oz)", calories: 130, protein: 0, carbs: 35, fat: 0 },
+            { name: "Pedialyte (12oz)", calories: 25, protein: 0, carbs: 6, fat: 0 },
+            { name: "Coconut Water (8oz)", calories: 45, protein: 2, carbs: 9, fat: 0 },
+            { name: "Red Bull (8.4oz)", calories: 110, protein: 1, carbs: 27, fat: 0 },
+            { name: "Monster Energy (16oz)", calories: 210, protein: 0, carbs: 54, fat: 0 },
+            { name: "Energy Drink (sugar-free, 16oz)", calories: 10, protein: 0, carbs: 2, fat: 0 },
+            { name: "Pre-Workout Drink (1 scoop)", calories: 10, protein: 0, carbs: 1, fat: 0 },
+            { name: "BCAA Drink (1 scoop)", calories: 5, protein: 0, carbs: 1, fat: 0 },
+            { name: "Electrolyte Powder (1 packet)", calories: 10, protein: 0, carbs: 2, fat: 0 },
+
+            // Alcohol
+            { name: "Beer (regular, 12oz)", calories: 153, protein: 2, carbs: 13, fat: 0 },
+            { name: "Beer (light, 12oz)", calories: 103, protein: 1, carbs: 6, fat: 0 },
+            { name: "Beer (IPA, 12oz)", calories: 200, protein: 2, carbs: 15, fat: 0 },
+            { name: "Red Wine (5oz)", calories: 125, protein: 0, carbs: 4, fat: 0 },
+            { name: "White Wine (5oz)", calories: 121, protein: 0, carbs: 4, fat: 0 },
+            { name: "Rosé Wine (5oz)", calories: 120, protein: 0, carbs: 4, fat: 0 },
+            { name: "Champagne (5oz)", calories: 85, protein: 0, carbs: 1, fat: 0 },
+            { name: "Vodka (1.5oz shot)", calories: 97, protein: 0, carbs: 0, fat: 0 },
+            { name: "Whiskey (1.5oz shot)", calories: 105, protein: 0, carbs: 0, fat: 0 },
+            { name: "Rum (1.5oz shot)", calories: 97, protein: 0, carbs: 0, fat: 0 },
+            { name: "Tequila (1.5oz shot)", calories: 97, protein: 0, carbs: 0, fat: 0 },
+            { name: "Gin (1.5oz shot)", calories: 97, protein: 0, carbs: 0, fat: 0 },
+            { name: "Margarita (8oz)", calories: 274, protein: 0, carbs: 36, fat: 0 },
+            { name: "Piña Colada (8oz)", calories: 490, protein: 1, carbs: 64, fat: 12 },
+            { name: "Mojito (8oz)", calories: 217, protein: 0, carbs: 24, fat: 0 },
+            { name: "Long Island Iced Tea (8oz)", calories: 292, protein: 0, carbs: 22, fat: 0 },
+            { name: "Hard Seltzer (12oz)", calories: 100, protein: 0, carbs: 2, fat: 0 },
+            { name: "Mimosa (6oz)", calories: 120, protein: 0, carbs: 12, fat: 0 },
+
+            // Other
+            { name: "Water (8oz)", calories: 0, protein: 0, carbs: 0, fat: 0 },
+            { name: "Hot Chocolate (8oz)", calories: 190, protein: 8, carbs: 27, fat: 6 },
+            { name: "Apple Cider (8oz)", calories: 120, protein: 0, carbs: 28, fat: 0 },
+            { name: "Kombucha (12oz)", calories: 60, protein: 0, carbs: 14, fat: 0 }
           ],
-          dairy: [
-            { name: "Milk (2% fat, 8oz)", calories: 122, protein: 8, carbs: 12, fat: 5 },
-            { name: "Milk (whole, 8oz)", calories: 146, protein: 8, carbs: 11, fat: 8 },
-            { name: "Milk (skim, 8oz)", calories: 83, protein: 8, carbs: 12, fat: 0 },
-            { name: "Almond Milk (unsweetened, 8oz)", calories: 30, protein: 1, carbs: 2, fat: 3 },
-            { name: "Soy Milk (unsweetened, 8oz)", calories: 80, protein: 7, carbs: 4, fat: 4 },
-            { name: "Oat Milk (unsweetened, 8oz)", calories: 50, protein: 0, carbs: 9, fat: 2 },
-            { name: "Coconut Milk (8oz)", calories: 45, protein: 0, carbs: 3, fat: 5 },
-            { name: "Cheddar Cheese (1oz)", calories: 113, protein: 7, carbs: 1, fat: 9 },
-            { name: "Mozzarella Cheese (1oz)", calories: 85, protein: 6, carbs: 1, fat: 6 },
-            { name: "Swiss Cheese (1oz)", calories: 111, protein: 8, carbs: 1, fat: 9 },
-            { name: "Parmesan Cheese (1oz)", calories: 111, protein: 10, carbs: 1, fat: 7 },
-            { name: "Greek Yogurt (plain, 6oz)", calories: 100, protein: 18, carbs: 6, fat: 0 },
-            { name: "Regular Yogurt (plain, 6oz)", calories: 100, protein: 4, carbs: 7, fat: 5 },
-            { name: "Ice Cream (vanilla, 1/2 cup)", calories: 137, protein: 2, carbs: 16, fat: 7 },
-            { name: "Frozen Yogurt (1/2 cup)", calories: 110, protein: 3, carbs: 20, fat: 2 },
-            { name: "Cottage Cheese (low-fat, 4oz)", calories: 90, protein: 14, carbs: 3, fat: 2 },
-            { name: "Cream Cheese (2 tbsp)", calories: 99, protein: 2, carbs: 1, fat: 10 },
-            { name: "Sour Cream (2 tbsp)", calories: 46, protein: 1, carbs: 1, fat: 5 }
+          'prepared meals': [
+            // Sandwiches & Burgers
+            { name: "Hamburger (single patty)", calories: 354, protein: 20, carbs: 29, fat: 17 },
+            { name: "Cheeseburger (single patty)", calories: 400, protein: 22, carbs: 30, fat: 22 },
+            { name: "Double Cheeseburger", calories: 620, protein: 35, carbs: 33, fat: 38 },
+            { name: "Turkey Burger", calories: 310, protein: 26, carbs: 28, fat: 12 },
+            { name: "BLT Sandwich", calories: 344, protein: 12, carbs: 28, fat: 19 },
+            { name: "Club Sandwich", calories: 456, protein: 28, carbs: 32, fat: 24 },
+            { name: "Grilled Cheese Sandwich", calories: 366, protein: 14, carbs: 28, fat: 22 },
+            { name: "Turkey & Cheese Sandwich", calories: 330, protein: 24, carbs: 30, fat: 12 },
+            { name: "Ham & Cheese Sandwich", calories: 352, protein: 21, carbs: 29, fat: 16 },
+            { name: "Tuna Salad Sandwich", calories: 390, protein: 22, carbs: 31, fat: 19 },
+            { name: "Chicken Salad Sandwich", calories: 380, protein: 24, carbs: 28, fat: 18 },
+            { name: "Egg Salad Sandwich", calories: 348, protein: 14, carbs: 28, fat: 20 },
+            { name: "PB&J Sandwich", calories: 376, protein: 13, carbs: 50, fat: 15 },
+            { name: "Philly Cheesesteak", calories: 510, protein: 30, carbs: 40, fat: 26 },
+            { name: "Reuben Sandwich", calories: 520, protein: 28, carbs: 32, fat: 30 },
+            { name: "Pulled Pork Sandwich", calories: 430, protein: 28, carbs: 36, fat: 18 },
+            { name: "French Dip Sandwich", calories: 420, protein: 32, carbs: 34, fat: 16 },
+            { name: "Meatball Sub (6 inch)", calories: 480, protein: 24, carbs: 44, fat: 22 },
+            { name: "Italian Sub (6 inch)", calories: 500, protein: 22, carbs: 42, fat: 26 },
+            { name: "Veggie Sandwich", calories: 290, protein: 10, carbs: 38, fat: 11 },
+
+            // Wraps & Burritos
+            { name: "Chicken Wrap", calories: 420, protein: 28, carbs: 38, fat: 16 },
+            { name: "Turkey Wrap", calories: 380, protein: 26, carbs: 36, fat: 14 },
+            { name: "Chicken Caesar Wrap", calories: 470, protein: 30, carbs: 36, fat: 22 },
+            { name: "Beef Burrito", calories: 490, protein: 24, carbs: 52, fat: 20 },
+            { name: "Chicken Burrito", calories: 450, protein: 28, carbs: 50, fat: 16 },
+            { name: "Bean Burrito", calories: 380, protein: 14, carbs: 55, fat: 12 },
+            { name: "Breakfast Burrito", calories: 450, protein: 20, carbs: 40, fat: 22 },
+            { name: "Burrito Bowl (Chipotle-style)", calories: 600, protein: 35, carbs: 55, fat: 22 },
+
+            // Pizza
+            { name: "Pizza (cheese, 1 slice)", calories: 272, protein: 12, carbs: 34, fat: 10 },
+            { name: "Pizza (pepperoni, 1 slice)", calories: 298, protein: 13, carbs: 34, fat: 13 },
+            { name: "Pizza (meat lovers, 1 slice)", calories: 350, protein: 16, carbs: 34, fat: 18 },
+            { name: "Pizza (veggie, 1 slice)", calories: 260, protein: 11, carbs: 35, fat: 9 },
+            { name: "Pizza (margherita, 1 slice)", calories: 250, protein: 11, carbs: 30, fat: 10 },
+            { name: "Pizza (BBQ chicken, 1 slice)", calories: 285, protein: 15, carbs: 36, fat: 10 },
+            { name: "Pizza (Hawaiian, 1 slice)", calories: 280, protein: 13, carbs: 36, fat: 10 },
+            { name: "Pizza (thin crust, 1 slice)", calories: 220, protein: 10, carbs: 24, fat: 9 },
+            { name: "Pizza (deep dish, 1 slice)", calories: 400, protein: 16, carbs: 42, fat: 18 },
+            { name: "Calzone (half)", calories: 480, protein: 22, carbs: 48, fat: 20 },
+
+            // Pasta Dishes
+            { name: "Spaghetti & Meatballs (1 cup)", calories: 450, protein: 22, carbs: 48, fat: 18 },
+            { name: "Fettuccine Alfredo (1 cup)", calories: 500, protein: 16, carbs: 42, fat: 30 },
+            { name: "Chicken Alfredo (1 cup)", calories: 520, protein: 28, carbs: 42, fat: 26 },
+            { name: "Pasta Bolognese (1 cup)", calories: 420, protein: 20, carbs: 46, fat: 16 },
+            { name: "Penne Vodka (1 cup)", calories: 430, protein: 14, carbs: 48, fat: 20 },
+            { name: "Carbonara (1 cup)", calories: 480, protein: 20, carbs: 42, fat: 24 },
+            { name: "Pasta Primavera (1 cup)", calories: 320, protein: 12, carbs: 44, fat: 10 },
+            { name: "Mac and Cheese (1 cup)", calories: 380, protein: 14, carbs: 40, fat: 18 },
+            { name: "Lasagna (1 piece)", calories: 380, protein: 22, carbs: 30, fat: 18 },
+            { name: "Ravioli (cheese, 8 pieces)", calories: 360, protein: 14, carbs: 44, fat: 14 },
+
+            // Rice & Bowls
+            { name: "Chicken & Rice Bowl", calories: 450, protein: 35, carbs: 50, fat: 10 },
+            { name: "Teriyaki Chicken Bowl", calories: 480, protein: 30, carbs: 58, fat: 12 },
+            { name: "Poke Bowl (medium)", calories: 450, protein: 25, carbs: 55, fat: 14 },
+            { name: "Bibimbap Bowl", calories: 490, protein: 22, carbs: 60, fat: 16 },
+            { name: "Grain Bowl (quinoa base)", calories: 420, protein: 20, carbs: 48, fat: 16 },
+            { name: "Buddha Bowl", calories: 380, protein: 15, carbs: 50, fat: 14 },
+
+            // Chicken Dishes
+            { name: "Grilled Chicken Breast (6oz)", calories: 248, protein: 47, carbs: 0, fat: 5 },
+            { name: "Fried Chicken (1 breast)", calories: 320, protein: 34, carbs: 11, fat: 15 },
+            { name: "Fried Chicken (1 thigh)", calories: 280, protein: 20, carbs: 9, fat: 18 },
+            { name: "Fried Chicken Tenders (4 pc)", calories: 360, protein: 28, carbs: 20, fat: 18 },
+            { name: "Chicken Parmesan", calories: 490, protein: 38, carbs: 24, fat: 26 },
+            { name: "Chicken Marsala", calories: 380, protein: 36, carbs: 12, fat: 18 },
+            { name: "Chicken Stir Fry (1 cup)", calories: 320, protein: 28, carbs: 18, fat: 14 },
+            { name: "Chicken Tikka Masala (1 cup)", calories: 350, protein: 24, carbs: 16, fat: 20 },
+            { name: "Butter Chicken (1 cup)", calories: 380, protein: 24, carbs: 14, fat: 24 },
+            { name: "Chicken Quesadilla", calories: 480, protein: 28, carbs: 36, fat: 24 },
+            { name: "Chicken Fajitas (2 fajitas)", calories: 420, protein: 30, carbs: 32, fat: 18 },
+            { name: "Chicken Nuggets (10 pieces)", calories: 430, protein: 22, carbs: 26, fat: 26 },
+            { name: "Chicken Wings (buffalo, 6 pc)", calories: 430, protein: 32, carbs: 2, fat: 32 },
+            { name: "Chicken Wings (BBQ, 6 pc)", calories: 450, protein: 30, carbs: 14, fat: 28 },
+            { name: "Rotisserie Chicken (1/4)", calories: 320, protein: 38, carbs: 0, fat: 18 },
+
+            // Tacos & Mexican
+            { name: "Taco (beef, hard shell)", calories: 210, protein: 10, carbs: 15, fat: 12 },
+            { name: "Taco (chicken, soft)", calories: 190, protein: 14, carbs: 16, fat: 8 },
+            { name: "Taco (fish)", calories: 220, protein: 15, carbs: 18, fat: 10 },
+            { name: "Taco (carnitas)", calories: 230, protein: 14, carbs: 16, fat: 12 },
+            { name: "Enchiladas (2 pieces)", calories: 440, protein: 22, carbs: 36, fat: 22 },
+            { name: "Tamale (1 piece)", calories: 280, protein: 10, carbs: 30, fat: 14 },
+            { name: "Nachos (loaded, 1 plate)", calories: 600, protein: 18, carbs: 55, fat: 34 },
+            { name: "Quesadilla (cheese)", calories: 380, protein: 16, carbs: 32, fat: 20 },
+            { name: "Tostada (1 piece)", calories: 200, protein: 8, carbs: 16, fat: 12 },
+            { name: "Chips & Queso (1 serving)", calories: 320, protein: 8, carbs: 30, fat: 18 },
+            { name: "Mexican Rice (1 cup)", calories: 210, protein: 4, carbs: 40, fat: 4 },
+            { name: "Refried Beans (1/2 cup)", calories: 118, protein: 7, carbs: 20, fat: 2 },
+
+            // Asian Dishes
+            { name: "Fried Rice (1 cup)", calories: 238, protein: 6, carbs: 34, fat: 9 },
+            { name: "Chicken Fried Rice (1 cup)", calories: 310, protein: 14, carbs: 38, fat: 12 },
+            { name: "Shrimp Fried Rice (1 cup)", calories: 290, protein: 12, carbs: 38, fat: 10 },
+            { name: "Lo Mein (1 cup)", calories: 310, protein: 12, carbs: 38, fat: 12 },
+            { name: "Chow Mein (1 cup)", calories: 260, protein: 10, carbs: 32, fat: 10 },
+            { name: "Pad Thai (1 cup)", calories: 380, protein: 14, carbs: 46, fat: 14 },
+            { name: "General Tso's Chicken (1 cup)", calories: 420, protein: 22, carbs: 38, fat: 20 },
+            { name: "Orange Chicken (1 cup)", calories: 400, protein: 20, carbs: 42, fat: 16 },
+            { name: "Kung Pao Chicken (1 cup)", calories: 350, protein: 24, carbs: 18, fat: 20 },
+            { name: "Sweet & Sour Chicken (1 cup)", calories: 380, protein: 18, carbs: 44, fat: 14 },
+            { name: "Beef & Broccoli (1 cup)", calories: 320, protein: 22, carbs: 14, fat: 18 },
+            { name: "Mongolian Beef (1 cup)", calories: 360, protein: 22, carbs: 20, fat: 20 },
+            { name: "Egg Drop Soup (1 cup)", calories: 73, protein: 4, carbs: 8, fat: 3 },
+            { name: "Wonton Soup (1 cup)", calories: 182, protein: 14, carbs: 12, fat: 8 },
+            { name: "Hot & Sour Soup (1 cup)", calories: 95, protein: 6, carbs: 10, fat: 3 },
+            { name: "Miso Soup (1 cup)", calories: 84, protein: 6, carbs: 8, fat: 3 },
+            { name: "Pho (1 bowl)", calories: 450, protein: 25, carbs: 55, fat: 10 },
+            { name: "Ramen (1 bowl)", calories: 500, protein: 20, carbs: 60, fat: 18 },
+            { name: "Tom Yum Soup (1 cup)", calories: 100, protein: 8, carbs: 8, fat: 4 },
+            { name: "Curry (Thai, 1 cup)", calories: 350, protein: 18, carbs: 14, fat: 24 },
+            { name: "Sushi Roll (6 pieces)", calories: 250, protein: 12, carbs: 36, fat: 6 },
+            { name: "Sushi Roll (spicy tuna, 6 pc)", calories: 290, protein: 14, carbs: 38, fat: 8 },
+            { name: "Sushi (nigiri, 2 pieces)", calories: 100, protein: 6, carbs: 14, fat: 1 },
+            { name: "Sashimi (6 pieces)", calories: 120, protein: 22, carbs: 0, fat: 3 },
+            { name: "Gyoza/Dumplings (6 pieces)", calories: 280, protein: 10, carbs: 28, fat: 14 },
+            { name: "Spring Roll (1 piece)", calories: 90, protein: 3, carbs: 12, fat: 3 },
+            { name: "Egg Roll (1 piece)", calories: 200, protein: 6, carbs: 20, fat: 10 },
+            { name: "Edamame (appetizer, 1 cup)", calories: 120, protein: 11, carbs: 10, fat: 5 },
+
+            // Soups & Stews
+            { name: "Chicken Noodle Soup (1 cup)", calories: 120, protein: 8, carbs: 14, fat: 3 },
+            { name: "Tomato Soup (1 cup)", calories: 130, protein: 3, carbs: 20, fat: 4 },
+            { name: "Cream of Mushroom Soup (1 cup)", calories: 200, protein: 4, carbs: 14, fat: 14 },
+            { name: "Minestrone Soup (1 cup)", calories: 127, protein: 5, carbs: 21, fat: 3 },
+            { name: "Clam Chowder (1 cup)", calories: 231, protein: 9, carbs: 20, fat: 12 },
+            { name: "Broccoli Cheddar Soup (1 cup)", calories: 290, protein: 12, carbs: 16, fat: 20 },
+            { name: "French Onion Soup (1 cup)", calories: 210, protein: 8, carbs: 18, fat: 12 },
+            { name: "Lentil Soup (1 cup)", calories: 180, protein: 12, carbs: 28, fat: 2 },
+            { name: "Split Pea Soup (1 cup)", calories: 190, protein: 12, carbs: 32, fat: 2 },
+            { name: "Black Bean Soup (1 cup)", calories: 180, protein: 10, carbs: 30, fat: 2 },
+            { name: "Beef Stew (1 cup)", calories: 220, protein: 18, carbs: 18, fat: 8 },
+            { name: "Chili (beef, 1 cup)", calories: 260, protein: 18, carbs: 22, fat: 10 },
+            { name: "Chili (turkey, 1 cup)", calories: 220, protein: 20, carbs: 22, fat: 6 },
+            { name: "Chili (vegetarian, 1 cup)", calories: 190, protein: 10, carbs: 30, fat: 4 },
+            { name: "Chicken Tortilla Soup (1 cup)", calories: 180, protein: 14, carbs: 18, fat: 6 },
+            { name: "Pozole (1 cup)", calories: 240, protein: 16, carbs: 24, fat: 8 },
+            { name: "Gazpacho (1 cup)", calories: 56, protein: 1, carbs: 8, fat: 2 },
+
+            // Salads
+            { name: "Caesar Salad (side)", calories: 180, protein: 6, carbs: 10, fat: 14 },
+            { name: "Caesar Salad with Chicken", calories: 390, protein: 34, carbs: 12, fat: 22 },
+            { name: "Garden Salad (side)", calories: 70, protein: 3, carbs: 12, fat: 1 },
+            { name: "Cobb Salad", calories: 510, protein: 34, carbs: 10, fat: 38 },
+            { name: "Greek Salad", calories: 240, protein: 8, carbs: 12, fat: 18 },
+            { name: "Spinach Salad (with dressing)", calories: 200, protein: 6, carbs: 10, fat: 14 },
+            { name: "Asian Chicken Salad", calories: 380, protein: 28, carbs: 24, fat: 18 },
+            { name: "Taco Salad", calories: 520, protein: 22, carbs: 38, fat: 30 },
+            { name: "Caprese Salad", calories: 240, protein: 12, carbs: 6, fat: 18 },
+            { name: "Waldorf Salad (1 cup)", calories: 220, protein: 3, carbs: 18, fat: 16 },
+            { name: "Quinoa Salad (1 cup)", calories: 280, protein: 10, carbs: 36, fat: 10 },
+            { name: "Pasta Salad (1 cup)", calories: 310, protein: 8, carbs: 38, fat: 14 },
+            { name: "Couscous Salad (1 cup)", calories: 260, protein: 8, carbs: 36, fat: 10 },
+
+            // Breakfast Items
+            { name: "Pancakes (3 medium)", calories: 350, protein: 10, carbs: 56, fat: 10 },
+            { name: "Pancakes (protein, 3 medium)", calories: 300, protein: 24, carbs: 38, fat: 6 },
+            { name: "Waffle (1 large)", calories: 310, protein: 8, carbs: 42, fat: 12 },
+            { name: "French Toast (2 slices)", calories: 340, protein: 12, carbs: 38, fat: 16 },
+            { name: "Breakfast Sandwich (egg & cheese)", calories: 310, protein: 16, carbs: 28, fat: 14 },
+            { name: "Breakfast Sandwich (bacon egg cheese)", calories: 380, protein: 20, carbs: 28, fat: 20 },
+            { name: "Breakfast Sandwich (sausage egg cheese)", calories: 450, protein: 22, carbs: 28, fat: 28 },
+            { name: "Eggs Benedict (2 pieces)", calories: 560, protein: 24, carbs: 32, fat: 36 },
+            { name: "Avocado Toast (1 slice)", calories: 240, protein: 6, carbs: 20, fat: 15 },
+            { name: "Avocado Toast with Egg", calories: 330, protein: 14, carbs: 22, fat: 20 },
+            { name: "Bagel with Cream Cheese", calories: 388, protein: 13, carbs: 57, fat: 12 },
+            { name: "Bagel with Lox", calories: 420, protein: 22, carbs: 57, fat: 12 },
+            { name: "Toast with Butter (2 slices)", calories: 237, protein: 4, carbs: 26, fat: 13 },
+            { name: "Toast with Jam (2 slices)", calories: 210, protein: 4, carbs: 40, fat: 2 },
+            { name: "Yogurt Parfait", calories: 280, protein: 16, carbs: 40, fat: 6 },
+            { name: "Granola Bowl with Milk", calories: 350, protein: 10, carbs: 50, fat: 12 },
+            { name: "Oatmeal with Banana & PB", calories: 350, protein: 12, carbs: 52, fat: 12 },
+            { name: "Smoothie Bowl (medium)", calories: 350, protein: 10, carbs: 55, fat: 10 },
+
+            // Other Prepared
+            { name: "Steak & Baked Potato", calories: 580, protein: 40, carbs: 40, fat: 26 },
+            { name: "Meatloaf (1 slice)", calories: 290, protein: 18, carbs: 14, fat: 18 },
+            { name: "Pot Roast (6oz)", calories: 340, protein: 38, carbs: 10, fat: 16 },
+            { name: "Pork Chop (grilled, 6oz)", calories: 290, protein: 38, carbs: 0, fat: 14 },
+            { name: "BBQ Ribs (4 ribs)", calories: 580, protein: 40, carbs: 18, fat: 38 },
+            { name: "Fish and Chips", calories: 585, protein: 24, carbs: 52, fat: 30 },
+            { name: "Fish Tacos (2 tacos)", calories: 440, protein: 30, carbs: 36, fat: 20 },
+            { name: "Grilled Salmon Fillet (6oz)", calories: 310, protein: 34, carbs: 0, fat: 18 },
+            { name: "Shrimp Scampi (1 cup)", calories: 310, protein: 26, carbs: 12, fat: 18 },
+            { name: "Crab Cakes (2 cakes)", calories: 340, protein: 20, carbs: 18, fat: 20 },
+            { name: "Jambalaya (1 cup)", calories: 310, protein: 16, carbs: 38, fat: 10 },
+            { name: "Gumbo (1 cup)", calories: 240, protein: 14, carbs: 18, fat: 12 },
+            { name: "Shepherd's Pie (1 serving)", calories: 380, protein: 22, carbs: 34, fat: 16 },
+            { name: "Beef Stroganoff (1 cup)", calories: 420, protein: 24, carbs: 32, fat: 22 },
+            { name: "Stuffed Peppers (1 pepper)", calories: 260, protein: 16, carbs: 24, fat: 10 },
+            { name: "Eggplant Parmesan (1 serving)", calories: 320, protein: 14, carbs: 24, fat: 18 }
+          ],
+          'fast food': [
+            // Burgers
+            { name: "McDonald's Big Mac", calories: 550, protein: 25, carbs: 45, fat: 30 },
+            { name: "McDonald's Quarter Pounder", calories: 520, protein: 30, carbs: 42, fat: 26 },
+            { name: "McDonald's McChicken", calories: 400, protein: 14, carbs: 40, fat: 21 },
+            { name: "McDonald's Filet-O-Fish", calories: 390, protein: 16, carbs: 39, fat: 19 },
+            { name: "McDonald's McMuffin (Egg)", calories: 310, protein: 17, carbs: 30, fat: 13 },
+            { name: "McDonald's McGriddle (Sausage)", calories: 430, protein: 11, carbs: 42, fat: 24 },
+            { name: "McDonald's Hash Brown", calories: 140, protein: 1, carbs: 15, fat: 8 },
+            { name: "McDonald's Fries (medium)", calories: 320, protein: 5, carbs: 43, fat: 15 },
+            { name: "McDonald's Fries (large)", calories: 480, protein: 7, carbs: 65, fat: 23 },
+            { name: "McDonald's 10pc Nuggets", calories: 410, protein: 24, carbs: 24, fat: 24 },
+            { name: "Wendy's Dave's Single", calories: 590, protein: 30, carbs: 45, fat: 34 },
+            { name: "Wendy's Baconator", calories: 950, protein: 57, carbs: 38, fat: 65 },
+            { name: "Wendy's Spicy Chicken", calories: 500, protein: 30, carbs: 49, fat: 19 },
+            { name: "Wendy's Fries (medium)", calories: 420, protein: 5, carbs: 56, fat: 19 },
+            { name: "Burger King Whopper", calories: 660, protein: 28, carbs: 49, fat: 40 },
+            { name: "Burger King Impossible Whopper", calories: 630, protein: 25, carbs: 58, fat: 34 },
+            { name: "Five Guys Cheeseburger", calories: 840, protein: 47, carbs: 40, fat: 55 },
+            { name: "Five Guys Fries (regular)", calories: 530, protein: 8, carbs: 63, fat: 23 },
+            { name: "In-N-Out Double-Double", calories: 670, protein: 37, carbs: 39, fat: 41 },
+            { name: "In-N-Out Protein Style Burger", calories: 330, protein: 18, carbs: 11, fat: 25 },
+            { name: "Shake Shack ShackBurger", calories: 530, protein: 28, carbs: 27, fat: 34 },
+
+            // Chicken
+            { name: "Chick-fil-A Sandwich (original)", calories: 440, protein: 28, carbs: 40, fat: 19 },
+            { name: "Chick-fil-A Sandwich (spicy)", calories: 450, protein: 28, carbs: 42, fat: 19 },
+            { name: "Chick-fil-A Nuggets (8pc)", calories: 250, protein: 27, carbs: 11, fat: 11 },
+            { name: "Chick-fil-A Nuggets (12pc)", calories: 380, protein: 40, carbs: 16, fat: 17 },
+            { name: "Chick-fil-A Fries (medium)", calories: 360, protein: 4, carbs: 43, fat: 18 },
+            { name: "Chick-fil-A Grilled Nuggets (8pc)", calories: 130, protein: 25, carbs: 1, fat: 3 },
+            { name: "Popeyes Chicken Sandwich", calories: 700, protein: 28, carbs: 50, fat: 42 },
+            { name: "Popeyes 3pc Tenders", calories: 410, protein: 28, carbs: 25, fat: 22 },
+            { name: "KFC Original Recipe (1 breast)", calories: 390, protein: 39, carbs: 11, fat: 21 },
+            { name: "KFC Extra Crispy (1 breast)", calories: 490, protein: 34, carbs: 17, fat: 32 },
+            { name: "Wingstop Wings (6 classic)", calories: 540, protein: 42, carbs: 0, fat: 40 },
+            { name: "Wingstop Wings (6 boneless)", calories: 470, protein: 26, carbs: 28, fat: 28 },
+
+            // Subs & Sandwiches
+            { name: "Subway 6\" Turkey Breast", calories: 250, protein: 18, carbs: 40, fat: 3 },
+            { name: "Subway 6\" Italian BMT", calories: 380, protein: 17, carbs: 42, fat: 15 },
+            { name: "Subway 6\" Meatball Marinara", calories: 460, protein: 18, carbs: 52, fat: 18 },
+            { name: "Subway 6\" Chicken Teriyaki", calories: 330, protein: 26, carbs: 44, fat: 5 },
+            { name: "Jersey Mike's Club Sub (regular)", calories: 680, protein: 34, carbs: 56, fat: 34 },
+            { name: "Jimmy John's Original (regular)", calories: 570, protein: 26, carbs: 56, fat: 26 },
+
+            // Tex-Mex Fast Food
+            { name: "Chipotle Chicken Bowl", calories: 665, protein: 42, carbs: 55, fat: 28 },
+            { name: "Chipotle Steak Bowl", calories: 685, protein: 40, carbs: 55, fat: 32 },
+            { name: "Chipotle Chicken Burrito", calories: 1005, protein: 50, carbs: 105, fat: 38 },
+            { name: "Taco Bell Crunchy Taco", calories: 170, protein: 8, carbs: 13, fat: 10 },
+            { name: "Taco Bell Burrito Supreme", calories: 390, protein: 16, carbs: 51, fat: 14 },
+            { name: "Taco Bell Crunchwrap Supreme", calories: 530, protein: 16, carbs: 71, fat: 21 },
+            { name: "Taco Bell Quesadilla (chicken)", calories: 510, protein: 26, carbs: 37, fat: 27 },
+            { name: "Taco Bell Nachos BellGrande", calories: 740, protein: 16, carbs: 80, fat: 38 },
+
+            // Pizza Fast Food
+            { name: "Domino's Cheese Pizza (1 slice)", calories: 200, protein: 8, carbs: 24, fat: 8 },
+            { name: "Domino's Pepperoni Pizza (1 slice)", calories: 220, protein: 9, carbs: 24, fat: 10 },
+            { name: "Domino's Breadsticks (2 pieces)", calories: 220, protein: 6, carbs: 34, fat: 7 },
+            { name: "Pizza Hut Cheese (1 slice)", calories: 240, protein: 10, carbs: 26, fat: 10 },
+            { name: "Pizza Hut Pepperoni (1 slice)", calories: 260, protein: 10, carbs: 26, fat: 12 },
+            { name: "Little Caesar's Cheese (1 slice)", calories: 210, protein: 10, carbs: 24, fat: 8 },
+
+            // Asian Fast Food
+            { name: "Panda Express Orange Chicken", calories: 490, protein: 25, carbs: 51, fat: 23 },
+            { name: "Panda Express Kung Pao Chicken", calories: 290, protein: 16, carbs: 16, fat: 19 },
+            { name: "Panda Express Beijing Beef", calories: 470, protein: 14, carbs: 56, fat: 22 },
+            { name: "Panda Express Fried Rice (side)", calories: 520, protein: 13, carbs: 85, fat: 16 },
+            { name: "Panda Express Chow Mein (side)", calories: 510, protein: 13, carbs: 80, fat: 17 },
+
+            // Other Fast Food
+            { name: "Panera Bread Bowl Soup", calories: 880, protein: 36, carbs: 126, fat: 28 },
+            { name: "Panera Mac & Cheese (bowl)", calories: 730, protein: 26, carbs: 70, fat: 38 },
+            { name: "Panera Chicken Caesar Salad", calories: 510, protein: 35, carbs: 22, fat: 32 },
+            { name: "Starbucks Egg Bites (2 pieces)", calories: 230, protein: 13, carbs: 9, fat: 16 },
+            { name: "Starbucks Cake Pop", calories: 160, protein: 2, carbs: 20, fat: 8 },
+            { name: "Starbucks Croissant", calories: 260, protein: 5, carbs: 32, fat: 14 }
+          ],
+          'sauces & condiments': [
+            // Basic Condiments
+            { name: "Ketchup (1 tbsp)", calories: 20, protein: 0, carbs: 5, fat: 0 },
+            { name: "Mustard (1 tbsp)", calories: 3, protein: 0, carbs: 0, fat: 0 },
+            { name: "Dijon Mustard (1 tbsp)", calories: 5, protein: 0, carbs: 1, fat: 0 },
+            { name: "Honey Mustard (1 tbsp)", calories: 40, protein: 0, carbs: 6, fat: 2 },
+            { name: "Mayonnaise (1 tbsp)", calories: 94, protein: 0, carbs: 0, fat: 10 },
+            { name: "Mayo (light, 1 tbsp)", calories: 35, protein: 0, carbs: 1, fat: 3 },
+            { name: "BBQ Sauce (2 tbsp)", calories: 60, protein: 0, carbs: 13, fat: 0 },
+            { name: "Hot Sauce (1 tsp)", calories: 1, protein: 0, carbs: 0, fat: 0 },
+            { name: "Sriracha (1 tsp)", calories: 5, protein: 0, carbs: 1, fat: 0 },
+            { name: "Soy Sauce (1 tbsp)", calories: 8, protein: 1, carbs: 1, fat: 0 },
+            { name: "Teriyaki Sauce (2 tbsp)", calories: 40, protein: 1, carbs: 8, fat: 0 },
+            { name: "Worcestershire Sauce (1 tbsp)", calories: 13, protein: 0, carbs: 3, fat: 0 },
+            { name: "Fish Sauce (1 tbsp)", calories: 6, protein: 1, carbs: 1, fat: 0 },
+            { name: "Hoisin Sauce (1 tbsp)", calories: 35, protein: 1, carbs: 7, fat: 1 },
+            { name: "Oyster Sauce (1 tbsp)", calories: 9, protein: 0, carbs: 2, fat: 0 },
+            { name: "Steak Sauce (A1, 1 tbsp)", calories: 15, protein: 0, carbs: 3, fat: 0 },
+
+            // Dressings
+            { name: "Ranch Dressing (2 tbsp)", calories: 129, protein: 0, carbs: 2, fat: 13 },
+            { name: "Ranch (light, 2 tbsp)", calories: 60, protein: 1, carbs: 3, fat: 5 },
+            { name: "Caesar Dressing (2 tbsp)", calories: 150, protein: 1, carbs: 1, fat: 16 },
+            { name: "Italian Dressing (2 tbsp)", calories: 86, protein: 0, carbs: 3, fat: 8 },
+            { name: "Italian Dressing (light, 2 tbsp)", calories: 28, protein: 0, carbs: 3, fat: 2 },
+            { name: "Balsamic Vinaigrette (2 tbsp)", calories: 90, protein: 0, carbs: 5, fat: 8 },
+            { name: "Blue Cheese Dressing (2 tbsp)", calories: 150, protein: 1, carbs: 1, fat: 16 },
+            { name: "Thousand Island (2 tbsp)", calories: 110, protein: 0, carbs: 5, fat: 10 },
+            { name: "French Dressing (2 tbsp)", calories: 146, protein: 0, carbs: 5, fat: 14 },
+            { name: "Honey Mustard Dressing (2 tbsp)", calories: 110, protein: 0, carbs: 8, fat: 9 },
+            { name: "Vinaigrette (2 tbsp)", calories: 72, protein: 0, carbs: 2, fat: 7 },
+            { name: "Oil & Vinegar (2 tbsp)", calories: 140, protein: 0, carbs: 0, fat: 16 },
+            { name: "Greek Dressing (2 tbsp)", calories: 120, protein: 0, carbs: 2, fat: 13 },
+            { name: "Asian Sesame Dressing (2 tbsp)", calories: 80, protein: 1, carbs: 6, fat: 6 },
+
+            // Oils
+            { name: "Olive Oil (1 tbsp)", calories: 119, protein: 0, carbs: 0, fat: 14 },
+            { name: "Coconut Oil (1 tbsp)", calories: 121, protein: 0, carbs: 0, fat: 14 },
+            { name: "Avocado Oil (1 tbsp)", calories: 124, protein: 0, carbs: 0, fat: 14 },
+            { name: "Vegetable Oil (1 tbsp)", calories: 120, protein: 0, carbs: 0, fat: 14 },
+            { name: "Sesame Oil (1 tbsp)", calories: 120, protein: 0, carbs: 0, fat: 14 },
+            { name: "Butter (1 tbsp)", calories: 102, protein: 0, carbs: 0, fat: 12 },
+            { name: "Cooking Spray (1 second)", calories: 7, protein: 0, carbs: 0, fat: 1 },
+
+            // Sauces
+            { name: "Marinara Sauce (1/2 cup)", calories: 66, protein: 2, carbs: 10, fat: 2 },
+            { name: "Alfredo Sauce (1/4 cup)", calories: 110, protein: 2, carbs: 4, fat: 10 },
+            { name: "Pesto Sauce (2 tbsp)", calories: 160, protein: 3, carbs: 2, fat: 16 },
+            { name: "Bolognese Sauce (1/2 cup)", calories: 140, protein: 8, carbs: 10, fat: 7 },
+            { name: "Salsa (2 tbsp)", calories: 10, protein: 0, carbs: 2, fat: 0 },
+            { name: "Salsa Verde (2 tbsp)", calories: 10, protein: 0, carbs: 2, fat: 0 },
+            { name: "Pico de Gallo (2 tbsp)", calories: 5, protein: 0, carbs: 1, fat: 0 },
+            { name: "Guacamole (2 tbsp)", calories: 50, protein: 1, carbs: 3, fat: 5 },
+            { name: "Hummus (2 tbsp)", calories: 70, protein: 2, carbs: 6, fat: 5 },
+            { name: "Tahini (1 tbsp)", calories: 89, protein: 3, carbs: 3, fat: 8 },
+            { name: "Chimichurri (2 tbsp)", calories: 90, protein: 0, carbs: 1, fat: 10 },
+            { name: "Tzatziki (2 tbsp)", calories: 35, protein: 1, carbs: 2, fat: 3 },
+            { name: "Cranberry Sauce (2 tbsp)", calories: 50, protein: 0, carbs: 13, fat: 0 },
+            { name: "Gravy (1/4 cup)", calories: 30, protein: 1, carbs: 3, fat: 1 },
+
+            // Sweeteners & Toppings
+            { name: "Honey (1 tbsp)", calories: 64, protein: 0, carbs: 17, fat: 0 },
+            { name: "Maple Syrup (2 tbsp)", calories: 104, protein: 0, carbs: 27, fat: 0 },
+            { name: "Pancake Syrup (2 tbsp)", calories: 100, protein: 0, carbs: 26, fat: 0 },
+            { name: "Sugar (1 tsp)", calories: 16, protein: 0, carbs: 4, fat: 0 },
+            { name: "Brown Sugar (1 tsp)", calories: 15, protein: 0, carbs: 4, fat: 0 },
+            { name: "Agave Nectar (1 tbsp)", calories: 60, protein: 0, carbs: 16, fat: 0 },
+            { name: "Jam/Jelly (1 tbsp)", calories: 50, protein: 0, carbs: 13, fat: 0 },
+            { name: "Nutella (2 tbsp)", calories: 200, protein: 2, carbs: 23, fat: 12 },
+            { name: "Whipped Cream (2 tbsp)", calories: 15, protein: 0, carbs: 1, fat: 1 },
+            { name: "Chocolate Syrup (2 tbsp)", calories: 100, protein: 1, carbs: 24, fat: 0 },
+            { name: "Caramel Sauce (2 tbsp)", calories: 100, protein: 0, carbs: 20, fat: 2 }
+          ],
+          desserts: [
+            // Baked Goods
+            { name: "Chocolate Chip Cookie (1 medium)", calories: 200, protein: 2, carbs: 28, fat: 10 },
+            { name: "Oatmeal Raisin Cookie (1 medium)", calories: 180, protein: 3, carbs: 28, fat: 7 },
+            { name: "Sugar Cookie (1 medium)", calories: 160, protein: 2, carbs: 22, fat: 7 },
+            { name: "Brownie (2\" square)", calories: 230, protein: 3, carbs: 30, fat: 12 },
+            { name: "Blondie (2\" square)", calories: 220, protein: 3, carbs: 28, fat: 11 },
+            { name: "Chocolate Cake (1 slice)", calories: 350, protein: 5, carbs: 50, fat: 15 },
+            { name: "Vanilla Cake (1 slice)", calories: 310, protein: 4, carbs: 48, fat: 12 },
+            { name: "Carrot Cake (1 slice)", calories: 420, protein: 5, carbs: 52, fat: 22 },
+            { name: "Red Velvet Cake (1 slice)", calories: 370, protein: 4, carbs: 48, fat: 18 },
+            { name: "Cheesecake (1 slice)", calories: 400, protein: 7, carbs: 32, fat: 28 },
+            { name: "Cupcake (frosted)", calories: 280, protein: 3, carbs: 40, fat: 12 },
+            { name: "Muffin (blueberry)", calories: 350, protein: 5, carbs: 50, fat: 14 },
+            { name: "Muffin (chocolate chip)", calories: 400, protein: 5, carbs: 56, fat: 18 },
+            { name: "Muffin (bran)", calories: 300, protein: 6, carbs: 48, fat: 10 },
+            { name: "Banana Bread (1 slice)", calories: 260, protein: 4, carbs: 38, fat: 10 },
+            { name: "Scone (medium)", calories: 340, protein: 6, carbs: 44, fat: 16 },
+            { name: "Cinnamon Roll (medium)", calories: 420, protein: 6, carbs: 58, fat: 18 },
+            { name: "Danish Pastry (1 piece)", calories: 310, protein: 5, carbs: 34, fat: 17 },
+            { name: "Donut (glazed)", calories: 260, protein: 3, carbs: 30, fat: 14 },
+            { name: "Donut (chocolate frosted)", calories: 300, protein: 3, carbs: 34, fat: 17 },
+            { name: "Donut (jelly-filled)", calories: 290, protein: 4, carbs: 38, fat: 14 },
+            { name: "Pop-Tart (1 pastry)", calories: 200, protein: 2, carbs: 36, fat: 5 },
+
+            // Pies & Tarts
+            { name: "Apple Pie (1 slice)", calories: 296, protein: 2, carbs: 43, fat: 14 },
+            { name: "Pumpkin Pie (1 slice)", calories: 316, protein: 7, carbs: 41, fat: 14 },
+            { name: "Pecan Pie (1 slice)", calories: 503, protein: 6, carbs: 64, fat: 27 },
+            { name: "Cherry Pie (1 slice)", calories: 325, protein: 3, carbs: 50, fat: 14 },
+            { name: "Key Lime Pie (1 slice)", calories: 350, protein: 5, carbs: 44, fat: 18 },
+            { name: "Fruit Tart (1 piece)", calories: 280, protein: 3, carbs: 36, fat: 14 },
+
+            // Frozen & Creamy
+            { name: "Ice Cream Sundae", calories: 350, protein: 5, carbs: 48, fat: 16 },
+            { name: "Banana Split", calories: 520, protein: 8, carbs: 72, fat: 22 },
+            { name: "Milkshake (chocolate, 16oz)", calories: 580, protein: 12, carbs: 80, fat: 24 },
+            { name: "Milkshake (vanilla, 16oz)", calories: 530, protein: 12, carbs: 72, fat: 22 },
+            { name: "Popsicle (1 bar)", calories: 42, protein: 0, carbs: 10, fat: 0 },
+            { name: "Fudgsicle (1 bar)", calories: 80, protein: 3, carbs: 15, fat: 1 },
+            { name: "Ice Cream Bar (coated)", calories: 260, protein: 3, carbs: 24, fat: 17 },
+            { name: "Pudding (chocolate, 1/2 cup)", calories: 150, protein: 3, carbs: 26, fat: 4 },
+            { name: "Pudding (vanilla, 1/2 cup)", calories: 140, protein: 3, carbs: 24, fat: 4 },
+            { name: "Rice Pudding (1/2 cup)", calories: 170, protein: 4, carbs: 28, fat: 4 },
+            { name: "Crème Brûlée", calories: 310, protein: 5, carbs: 28, fat: 20 },
+            { name: "Tiramisu (1 serving)", calories: 350, protein: 6, carbs: 38, fat: 20 },
+            { name: "Panna Cotta", calories: 280, protein: 4, carbs: 24, fat: 18 },
+            { name: "Flan (1 serving)", calories: 220, protein: 6, carbs: 30, fat: 8 },
+            { name: "Mousse (chocolate, 1/2 cup)", calories: 230, protein: 4, carbs: 22, fat: 14 },
+
+            // Other
+            { name: "Cobbler (fruit, 1 serving)", calories: 320, protein: 3, carbs: 48, fat: 14 },
+            { name: "Baklava (1 piece)", calories: 230, protein: 4, carbs: 28, fat: 12 },
+            { name: "Churro (1 piece)", calories: 220, protein: 3, carbs: 28, fat: 11 },
+            { name: "Cannoli (1 piece)", calories: 310, protein: 7, carbs: 28, fat: 20 },
+            { name: "Éclair (1 piece)", calories: 260, protein: 6, carbs: 26, fat: 16 },
+            { name: "Macaron (1 piece)", calories: 70, protein: 1, carbs: 10, fat: 3 },
+            { name: "Mochi Ice Cream (1 piece)", calories: 110, protein: 1, carbs: 17, fat: 4 },
+            { name: "Jello (1/2 cup)", calories: 80, protein: 2, carbs: 19, fat: 0 }
           ]
         };
 
@@ -5827,8 +6645,12 @@
         );
       }
 
-      const total = 18;
+      const allTasks = [...tasks.core, ...tasks.lead, ...tasks.comm];
+      const total = allTasks.length;
       const done = data.done ? data.done.length : 0;
+      const streak = getStreak();
+      const hasFocus = focusTasks && focusTasks.length > 0;
+      const focusDone = hasFocus ? focusTasks.filter(id => data.done.includes(id)).length : 0;
 
       return (
         <div className="min-h-screen p-4">
@@ -5838,174 +6660,258 @@
                 <h1 className="text-4xl font-bold mb-1">Vita</h1>
                 <p className="text-sm text-gray-400">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
               </div>
-              <div className="flex items-center gap-2">
-                <div className={`px-3 py-1 rounded-full text-sm ${isExisting ? 'bg-green-700 text-white' : 'bg-slate-700 text-gray-200'}`}>
-                  {isExisting ? 'Existing' : 'Fresh'}
-                </div>
+              <div className="flex items-center gap-3">
+                {streak > 0 && (
+                  <div className="flex items-center gap-1 px-3 py-1 bg-amber-900 border border-amber-600 rounded-full">
+                    <span className="text-amber-400 font-bold text-sm">{streak}</span>
+                    <span className="text-xs text-amber-300">day{streak !== 1 ? 's' : ''}</span>
+                  </div>
+                )}
                 <button onClick={startNewDay} className="px-3 py-2 bg-slate-700 rounded text-sm">New Day</button>
               </div>
             </div>
 
             {saveStatus && <p className="text-center text-sm text-green-400 mb-2">{saveStatus}</p>}
 
-            <div className="flex gap-2 justify-center mb-6 flex-wrap">
-              <button onClick={() => setView('today')} className="px-3 py-2 bg-amber-600 text-white rounded-lg text-xs">Today</button>
-              <button onClick={() => setView('progress')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Progress</button>
-              <button onClick={() => setView('workouts')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Workouts</button>
-              <button onClick={() => setView('affirmations')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Affirmations</button>
-              <button onClick={() => setView('coach')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Coach</button>
-              <button onClick={() => setView('books')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Books</button>
-              <button onClick={() => setView('nutrition')} className="px-3 py-2 bg-slate-700 text-gray-300 rounded-lg text-xs">Nutrition</button>
-            </div>
-
-            <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
-              <div className="flex justify-between mb-3">
-                <span>Progress</span>
-                <span className="text-2xl font-bold text-amber-400">{done}/{total}</span>
+            {/* Soft backup banner */}
+            {backupBanner && (
+              <div className="bg-amber-900/60 border border-amber-700 rounded-lg p-3 mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-amber-200">
+                  <span>Backup recommended — {backupBanner} days since last export</span>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => { setView('data'); setBackupBanner(null); }} className="px-3 py-1 bg-amber-600 text-white rounded text-xs">Backup</button>
+                  <button onClick={() => setBackupBanner(null)} className="px-2 py-1 text-amber-400 text-xs">Dismiss</button>
+                </div>
               </div>
-              <div className="w-full bg-slate-700 rounded-full h-3">
-                <div className="bg-amber-500 h-3 rounded-full" style={{ width: `${(done/total)*100}%` }} />
+            )}
+
+            {/* Simplified navigation: core tabs + More */}
+            <div className="flex gap-2 justify-center mb-6 flex-wrap items-center">
+              <button onClick={() => setView('today')} className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium">Today</button>
+              <button onClick={() => setView('workouts')} className="px-4 py-2 bg-slate-700 text-gray-300 rounded-lg text-sm">Workouts</button>
+              <button onClick={() => setView('nutrition')} className="px-4 py-2 bg-slate-700 text-gray-300 rounded-lg text-sm">Nutrition</button>
+              <button onClick={() => setView('progress')} className="px-4 py-2 bg-slate-700 text-gray-300 rounded-lg text-sm">Progress</button>
+              <div className="relative">
+                <button onClick={() => setShowMoreNav(!showMoreNav)} className="px-4 py-2 bg-slate-700 text-gray-300 rounded-lg text-sm">More ▾</button>
+                {showMoreNav && (
+                  <div className="absolute top-full right-0 mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-xl z-50 min-w-[160px] py-1">
+                    {[
+                      { id: 'affirmations', label: 'Affirmations' },
+                      { id: 'coach', label: 'Coach' },
+                      { id: 'books', label: 'Books' },
+                      { id: 'intelligence', label: 'Intelligence' },
+                      { id: 'wellness', label: 'Wellness' },
+                      { id: 'dashboard', label: 'Dashboard' },
+                      { id: 'challenges', label: 'Challenges' },
+                      { id: 'coach-ai', label: 'AI Coach' },
+                      { id: 'data', label: 'Data & Backup' }
+                    ].map(item => (
+                      <button key={item.id} onClick={() => { setView(item.id); setShowMoreNav(false); }} className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-slate-700 transition-colors">
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
-              <h3 className="text-lg font-bold mb-4 text-center text-amber-400">💾 Save Today's Progress</h3>
-              <p className="text-sm text-gray-300 mb-4 text-center">
-                Save a complete snapshot of your day - all tasks, workouts, mood, and progress will be saved and viewable in your Progress history.
-              </p>
-              <button
-                onClick={async () => {
-                  // Include nutrition data in the snapshot
-                  const currentNutritionData = (() => {
-                    try {
-                      const savedNutrition = localStorage.getItem('vita-nutrition');
-                      if (savedNutrition) {
-                        const nutritionData = JSON.parse(savedNutrition);
-                        return nutritionData[today] || null;
-                      }
-                      return null;
-                    } catch (e) {
-                      console.error('Error loading nutrition for save:', e);
-                      return null;
-                    }
-                  })();
+            {/* Streak celebration */}
+            {streak >= 3 && done === 0 && (
+              <div className="bg-gradient-to-r from-amber-900/40 to-orange-900/40 border border-amber-700/50 rounded-xl p-4 mb-6 text-center">
+                <p className="text-amber-300 font-medium">You're on a {streak}-day streak — keep it going today</p>
+              </div>
+            )}
+            {done > 0 && done >= total && (
+              <div className="bg-gradient-to-r from-green-900/40 to-emerald-900/40 border border-green-700/50 rounded-xl p-4 mb-6 text-center">
+                <p className="text-green-300 font-bold text-lg">Perfect day — all {total} tasks complete</p>
+              </div>
+            )}
 
-                  const currentData = {
-                    ...data,
-                    date: today,
-                    lastSaved: new Date().toISOString(),
-                    nutritionData: currentNutritionData
-                  };
-                  const cleanData = JSON.parse(JSON.stringify(currentData));
-                  setData(cleanData);
-                  await save(cleanData);
-                  setSaveStatus('Today\'s progress saved! 📅');
-                  setTimeout(() => setSaveStatus(''), 3000);
-                }}
-                className="w-full py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors text-lg"
-              >
-                💾 Save Today's Progress
-              </button>
+            {/* Focus Mode — pick up to 5 tasks, or show focus progress */}
+            <div className="bg-slate-800 rounded-xl p-5 mb-6 border border-slate-700">
+              {!hasFocus ? (
+                <div>
+                  <h3 className="text-lg font-bold mb-1 text-amber-400">Pick today's focus</h3>
+                  <p className="text-xs text-gray-400 mb-3">Choose up to 5 tasks that matter most today</p>
+                  <div className="space-y-2">
+                    {allTasks.map(t => (
+                      <div key={t.id} onClick={() => toggleFocusTask(t.id)} className={`p-3 rounded-lg cursor-pointer flex items-center justify-between ${(focusTasks || []).includes(t.id) ? 'bg-amber-900/60 border border-amber-500' : 'bg-slate-700 hover:bg-slate-600'}`}>
+                        <span className="text-sm">{t.t}</span>
+                        {(focusTasks || []).includes(t.id) && <span className="text-amber-400 text-sm">Selected</span>}
+                      </div>
+                    ))}
+                  </div>
+                  {(focusTasks || []).length > 0 && (
+                    <p className="text-center text-sm text-amber-400 mt-3">{(focusTasks || []).length}/5 selected — start checking them off below</p>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <div className="flex justify-between items-center mb-3">
+                    <h3 className="text-lg font-bold text-amber-400">Today's Focus</h3>
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl font-bold text-amber-400">{focusDone}/{focusTasks.length}</span>
+                      <button onClick={() => { setFocusTasks(null); localStorage.removeItem('vita-focus-tasks'); }} className="text-xs text-gray-500 hover:text-gray-300">Edit</button>
+                    </div>
+                  </div>
+                  <div className="w-full bg-slate-700 rounded-full h-3 mb-4">
+                    <div className={`h-3 rounded-full transition-all duration-500 ${focusDone === focusTasks.length ? 'bg-green-500' : 'bg-amber-500'}`} style={{ width: `${(focusDone/focusTasks.length)*100}%` }} />
+                  </div>
+                  {focusDone === focusTasks.length && focusTasks.length > 0 && (
+                    <div className="text-center mb-3 py-2 bg-green-900/40 rounded-lg border border-green-700/50">
+                      <span className="text-green-300 font-medium">Focus complete — great day</span>
+                    </div>
+                  )}
+                  {focusTasks.map(id => {
+                    const t = allTasks.find(x => x.id === id);
+                    if (!t) return null;
+                    return (
+                      <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer transition-all ${data.done.includes(t.id) ? 'bg-green-900 border-2 border-green-500' : 'bg-slate-700 hover:bg-slate-600'}`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">{t.t}</span>
+                          {data.done.includes(t.id) ? <span>✅</span> : <span className="text-slate-500">○</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
-              <h3 className="mb-4">😊 Mood & Energy</h3>
-
-              <div className="mb-4">
-                <h4 className="text-sm font-medium text-gray-400 mb-2">How are you feeling?</h4>
-              <div className="flex gap-2 flex-wrap">
+            {/* Quick log: Mood + Energy */}
+            <div className="bg-slate-800 rounded-xl p-5 mb-6 border border-slate-700">
+              <h3 className="mb-3 text-sm font-medium text-gray-400">Mood & Energy</h3>
+              <div className="flex gap-2 flex-wrap mb-3">
                 {['😊 Sharp', '🙂 Good', '😐 Okay', '😔 Off', '😰 Hard'].map(m => (
-                    <button key={m} onClick={async () => { const nd = { ...data, mood: m }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} className={`px-4 py-2 rounded-lg ${data.mood === m ? 'bg-amber-500 text-white' : 'bg-slate-700 text-gray-300'}`}>
+                  <button key={m} onClick={async () => { const nd = { ...data, mood: m }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} className={`px-3 py-2 rounded-lg text-sm ${data.mood === m ? 'bg-amber-500 text-white' : 'bg-slate-700 text-gray-300'}`}>
                     {m}
                   </button>
                 ))}
-                </div>
               </div>
+              <div className="flex gap-2 flex-wrap">
+                {[
+                  { emoji: '⚡', label: 'High', value: 'high' },
+                  { emoji: '🔋', label: 'Good', value: 'good' },
+                  { emoji: '🪫', label: 'Low', value: 'low' },
+                  { emoji: '😴', label: 'Exhausted', value: 'exhausted' }
+                ].map(e => (
+                  <button key={e.value} onClick={async () => { const nd = { ...data, energyLevel: e.value }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} className={`px-3 py-2 rounded-lg text-sm ${data.energyLevel === e.value ? 'bg-blue-500 text-white' : 'bg-slate-700 text-gray-300'}`}>
+                    {e.emoji} {e.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-              <div>
-                <h4 className="text-sm font-medium text-gray-400 mb-2">Energy Level</h4>
-                <div className="flex gap-2 flex-wrap">
-                  {[
-                    { emoji: '⚡', label: 'High Energy', value: 'high' },
-                    { emoji: '🔋', label: 'Good Energy', value: 'good' },
-                    { emoji: '🪫', label: 'Low Energy', value: 'low' },
-                    { emoji: '😴', label: 'Exhausted', value: 'exhausted' }
-                  ].map(e => (
-                    <button key={e.value} onClick={async () => { const nd = { ...data, energyLevel: e.value }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} className={`px-4 py-2 rounded-lg ${data.energyLevel === e.value ? 'bg-blue-500 text-white' : 'bg-slate-700 text-gray-300'}`}>
-                      {e.emoji} {e.label}
-                    </button>
+            {/* Water */}
+            <div className="bg-slate-800 rounded-xl p-5 mb-6 border border-slate-700">
+              <div className="flex justify-between items-center mb-3">
+                <span className="text-sm font-medium text-gray-400">💧 Water</span>
+                <span className="text-xl font-bold text-blue-400">{water}/8</span>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => updateWater(-1)} className="px-4 py-2 bg-slate-700 text-white rounded-lg font-bold text-sm">-</button>
+                <button onClick={() => updateWater(1)} className="flex-1 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm">+ Glass</button>
+              </div>
+            </div>
+
+            {/* SaaS Work — auto-saves on blur, no manual save button */}
+            <div className="bg-slate-800 rounded-xl p-5 mb-6 border border-slate-700">
+              <h3 className="text-sm font-medium text-gray-400 mb-3">💻 SaaS Work</h3>
+              <textarea value={saas} onChange={e => setSaas(e.target.value)} onBlur={async () => { const nd = { ...data, saas, deepWork, talks }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} placeholder="What did you work on today?" className="w-full p-3 bg-slate-700 rounded text-white mb-3 text-sm" rows="2" />
+              <div className="grid grid-cols-2 gap-3">
+                <input type="number" step="0.5" value={deepWork} onChange={e => setDeepWork(e.target.value)} onBlur={async () => { const nd = { ...data, saas, deepWork, talks }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} placeholder="Deep work (hrs)" className="p-3 bg-slate-700 rounded text-white text-sm" />
+                <input type="number" value={talks} onChange={e => setTalks(e.target.value)} onBlur={async () => { const nd = { ...data, saas, deepWork, talks }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} placeholder="User talks" className="p-3 bg-slate-700 rounded text-white text-sm" />
+              </div>
+            </div>
+
+            {/* All Tasks — collapsed by default when focus mode is active */}
+            {hasFocus && (
+              <details className="mb-6">
+                <summary className="bg-slate-800 rounded-xl p-4 border border-slate-700 cursor-pointer text-gray-400 text-sm">
+                  All Tasks ({done}/{total} complete) — tap to expand
+                </summary>
+                <div className="mt-2 space-y-4">
+                  <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
+                    <h3 className="mb-3 text-sm font-medium text-gray-400">Non-Negotiables</h3>
+                    {tasks.core.map(t => (
+                      <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-green-900 border-2 border-green-500' : 'bg-slate-700'}`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">{t.t}</span>
+                          {data.done.includes(t.id) && <span>✅</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
+                    <h3 className="mb-3 text-sm font-medium text-gray-400">Leadership</h3>
+                    {tasks.lead.map(t => (
+                      <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-amber-900 border-2 border-amber-500' : 'bg-slate-700'}`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">{t.t}</span>
+                          {data.done.includes(t.id) && <span>✅</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
+                    <h3 className="mb-3 text-sm font-medium text-gray-400">Communication</h3>
+                    {tasks.comm.map(t => (
+                      <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-purple-900 border-2 border-purple-500' : 'bg-slate-700'}`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">{t.t}</span>
+                          {data.done.includes(t.id) && <span>✅</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </details>
+            )}
+
+            {/* Show all tasks without collapsing when no focus selected */}
+            {!hasFocus && (
+              <div className="space-y-4 mb-6">
+                <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
+                  <h3 className="mb-3 text-sm font-medium text-gray-400">Non-Negotiables</h3>
+                  {tasks.core.map(t => (
+                    <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-green-900 border-2 border-green-500' : 'bg-slate-700'}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm">{t.t}</span>
+                        {data.done.includes(t.id) && <span>✅</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
+                  <h3 className="mb-3 text-sm font-medium text-gray-400">Leadership</h3>
+                  {tasks.lead.map(t => (
+                    <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-amber-900 border-2 border-amber-500' : 'bg-slate-700'}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm">{t.t}</span>
+                        {data.done.includes(t.id) && <span>✅</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
+                  <h3 className="mb-3 text-sm font-medium text-gray-400">Communication</h3>
+                  {tasks.comm.map(t => (
+                    <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-purple-900 border-2 border-purple-500' : 'bg-slate-700'}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm">{t.t}</span>
+                        {data.done.includes(t.id) && <span>✅</span>}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
-            </div>
+            )}
 
-            <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
-              <div className="flex justify-between items-center mb-3">
-                <div className="flex items-center gap-2">💧<span className="ml-1">Water Intake</span></div>
-                <span className="text-xl font-bold text-blue-400">{water} glasses</span>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => updateWater(-1)} className="px-6 py-2 bg-slate-700 text-white rounded-lg font-bold">-</button>
-                <button onClick={() => updateWater(1)} className="flex-1 py-2 bg-blue-600 text-white rounded-lg font-bold">+ Glass</button>
-              </div>
-              <p className="text-xs text-gray-400 mt-2">Target: 8 glasses per day (64oz)</p>
-            </div>
-
-            <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
-              <div className="flex items-center gap-2 mb-3">💻<span>SaaS Work</span></div>
-              <textarea value={saas} onChange={e => setSaas(e.target.value)} onBlur={async () => { const nd = { ...data, saas }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} placeholder="What did you work on today?" className="w-full p-3 bg-slate-700 rounded text-white mb-3" rows="3" />
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <input type="number" step="0.5" value={deepWork} onChange={e => setDeepWork(e.target.value)} onBlur={async () => { const nd = { ...data, deepWork }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} placeholder="Deep work (hrs)" className="p-3 bg-slate-700 rounded text-white" />
-                <input type="number" value={talks} onChange={e => setTalks(e.target.value)} onBlur={async () => { const nd = { ...data, talks }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} placeholder="User talks" className="p-3 bg-slate-700 rounded text-white" />
-              </div>
-              <button onClick={async () => { const nd = { ...data, saas, deepWork, talks }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); setSaveStatus('SaaS work saved! ✓'); setTimeout(() => setSaveStatus(''), 2000); }} className="w-full py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors">
-                Save SaaS Work
-              </button>
-            </div>
-
-            <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
-              <h3 className="mb-3">Non-Negotiables</h3>
-              {tasks.core.map(t => (
-                <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-green-900 border-2 border-green-500' : 'bg-slate-700'}`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">{t.t}</span>
-                    {data.done.includes(t.id) && <span>✅</span>}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
-              <h3 className="mb-3">Leadership (Do 1+)</h3>
-              {tasks.lead.map(t => (
-                <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-amber-900 border-2 border-amber-500' : 'bg-slate-700'}`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">{t.t}</span>
-                    {data.done.includes(t.id) && <span>✅</span>}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
-              <h3 className="mb-3">Communication</h3>
-              {tasks.comm.map(t => (
-                <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-purple-900 border-2 border-purple-500' : 'bg-slate-700'}`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">{t.t}</span>
-                    {data.done.includes(t.id) && <span>✅</span>}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-
-            <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-              <div className="flex items-center gap-2 mb-3">📚<span>Reflection</span></div>
-              <textarea value={journal} onChange={e => setJournal(e.target.value)} onBlur={async () => { const nd = { ...data, journal }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} placeholder="What did I lead? What did I ship? How did I grow?" className="w-full p-3 bg-slate-700 rounded text-white mb-3" rows="4" />
-              <button onClick={async () => { const nd = { ...data, journal }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); setSaveStatus('Reflection saved! ✓'); setTimeout(() => setSaveStatus(''), 2000); }} className="w-full py-2 bg-amber-600 text-white rounded-lg font-semibold hover:bg-amber-700 transition-colors">
-                Save Reflection
-              </button>
+            {/* Reflection — auto-saves on blur */}
+            <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
+              <h3 className="text-sm font-medium text-gray-400 mb-3">📚 Reflection</h3>
+              <textarea value={journal} onChange={e => setJournal(e.target.value)} onBlur={async () => { const nd = { ...data, journal }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} placeholder="What did I lead? What did I ship? How did I grow?" className="w-full p-3 bg-slate-700 rounded text-white text-sm" rows="3" />
             </div>
 
           </div>
