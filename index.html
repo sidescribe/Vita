@@ -108,9 +108,22 @@
       }); // Current affirmations for each category
       const [foodSearchTerm, setFoodSearchTerm] = useState(''); // Search term for nutrition foods
       const [showDataModal, setShowDataModal] = useState(false); // Data management modal
-      const [backupBanner, setBackupBanner] = useState(null); // Non-blocking backup reminder
-      const [showMoreNav, setShowMoreNav] = useState(false); // "More" dropdown in nav
-      const [focusTasks, setFocusTasks] = useState(null); // User-selected focus tasks for today
+      const [backupBanner, setBackupBanner] = useState(null);
+      const [showMoreNav, setShowMoreNav] = useState(false);
+      const [focusTasks, setFocusTasks] = useState(null);
+      const [sleepTime, setSleepTime] = useState('');
+      const [wakeTime, setWakeTime] = useState('');
+      const [weeklyReview, setWeeklyReview] = useState(null);
+      const [showWeeklyReview, setShowWeeklyReview] = useState(false);
+      const [weeklyReviewText, setWeeklyReviewText] = useState({ wentWell: '', nextWeekFocus: '' });
+      const [customTasks, setCustomTasks] = useState([]);
+      const [showManageTasks, setShowManageTasks] = useState(false);
+      const [hiddenTasks, setHiddenTasks] = useState([]);
+      const [newCustomTask, setNewCustomTask] = useState('');
+      const [bodyWeight, setBodyWeight] = useState('');
+      const [weightHistory, setWeightHistory] = useState([]);
+      const [showWeightLog, setShowWeightLog] = useState(false);
+      const [customChallengeForm, setCustomChallengeForm] = useState({ title: '', description: '', duration: '', category: '', reward: '' });
 
       console.log('All state initialized successfully');
 
@@ -381,17 +394,31 @@
         }
       }, []);
 
-      // Load focus tasks from localStorage
+      // Load focus tasks, custom tasks, hidden tasks, weight history from localStorage
       useEffect(() => {
-        const savedFocus = localStorage.getItem('vita-focus-tasks');
-        if (savedFocus) {
-          try {
+        try {
+          const savedFocus = localStorage.getItem('vita-focus-tasks');
+          if (savedFocus) {
             const parsed = JSON.parse(savedFocus);
-            if (parsed.date === getTodayLocal()) {
-              setFocusTasks(parsed.tasks);
-            }
-          } catch (e) {}
-        }
+            if (parsed.date === getTodayLocal()) setFocusTasks(parsed.tasks);
+          }
+        } catch (e) {}
+        try {
+          const saved = localStorage.getItem('vita-custom-tasks');
+          if (saved) setCustomTasks(JSON.parse(saved));
+        } catch (e) {}
+        try {
+          const saved = localStorage.getItem('vita-hidden-tasks');
+          if (saved) setHiddenTasks(JSON.parse(saved));
+        } catch (e) {}
+        try {
+          const saved = localStorage.getItem('vita-weight-history');
+          if (saved) setWeightHistory(JSON.parse(saved));
+        } catch (e) {}
+        try {
+          const saved = localStorage.getItem('vita-weekly-review');
+          if (saved) setWeeklyReview(JSON.parse(saved));
+        } catch (e) {}
       }, []);
 
       // Load knowledge data on component mount
@@ -803,6 +830,137 @@
         localStorage.setItem('vita-focus-tasks', JSON.stringify({ date: getTodayLocal(), tasks: updated }));
       }
 
+      // Morning Brief generator
+      function getMorningBrief() {
+        const today = new Date();
+        const dayName = today.toLocaleDateString('en-US', { weekday: 'long' });
+        const isSunday = today.getDay() === 0;
+        const streak = getStreak();
+        const recentHistory = history.slice(0, 7);
+        const avgTasks = recentHistory.length > 0 ? Math.round(recentHistory.reduce((s, d) => s + (d.done ? d.done.length : 0), 0) / recentHistory.length) : 0;
+        const recentMoods = recentHistory.filter(d => d.mood).map(d => d.mood);
+        const lastMood = recentMoods.length > 0 ? recentMoods[0] : null;
+        const workoutsThisWeek = recentHistory.filter(d => d.workoutDone).length;
+
+        let greeting = '';
+        const hour = today.getHours();
+        if (hour < 12) greeting = 'Good morning';
+        else if (hour < 17) greeting = 'Good afternoon';
+        else greeting = 'Good evening';
+
+        let tips = [];
+        if (workoutsThisWeek < 3) tips.push('Consider fitting a workout in today');
+        if (lastMood === '😔 Off' || lastMood === '😰 Hard') tips.push('Yesterday was tough — be kind to yourself today');
+        if (streak >= 5) tips.push(`${streak}-day streak going strong — protect the chain`);
+        if (avgTasks < 8) tips.push('Try tackling your hardest task first thing');
+        if (isSunday) tips.push('Sunday is a great day for a weekly review');
+        if (tips.length === 0) tips.push('Stay focused and make today count');
+
+        return { greeting, dayName, tips, avgTasks, workoutsThisWeek, streak };
+      }
+
+      // Journaling prompts — rotates daily
+      const journalingPrompts = [
+        "What's one thing you're grateful for right now?",
+        "What would make today a 10/10 day?",
+        "What's something you've been avoiding? Why?",
+        "Who had a positive impact on you recently?",
+        "What's a lesson from this week you want to carry forward?",
+        "If you could change one habit starting today, what would it be?",
+        "What's something you accomplished recently that you're proud of?",
+        "Where do you feel stuck right now? What's one small step forward?",
+        "What would your ideal morning routine look like?",
+        "What's one boundary you need to set or reinforce?",
+        "How do you want to feel at the end of today?",
+        "What's one skill you want to develop this month?",
+        "Describe your energy patterns — when do you feel most alive?",
+        "What's a fear you've overcome or want to overcome?",
+        "Write a letter to your future self 6 months from now.",
+        "What relationships need more attention?",
+        "What's draining your energy right now?",
+        "What's one thing you could simplify in your life?",
+        "When did you last feel truly proud of yourself?",
+        "What does your ideal day look like in 5 years?",
+        "What are you most curious about right now?",
+        "What pattern keeps repeating in your life?",
+        "What would you do if you knew you couldn't fail?",
+        "Who do you admire most? What quality of theirs do you want?",
+        "What's your biggest time waster and how can you reduce it?",
+        "When was the last time you left your comfort zone?",
+        "What would you tell your younger self?",
+        "What are you tolerating that you shouldn't be?",
+        "How has your definition of success changed?",
+        "What gives you the most energy and flow?"
+      ];
+      function getTodaysPrompt() {
+        const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
+        return journalingPrompts[dayOfYear % journalingPrompts.length];
+      }
+
+      // Sleep/Wake logging
+      function saveSleepData(sleep, wake) {
+        const todayKey = getTodayLocal();
+        const sleepData = JSON.parse(localStorage.getItem('vita-sleep-data') || '{}');
+        sleepData[todayKey] = { sleep, wake };
+        localStorage.setItem('vita-sleep-data', JSON.stringify(sleepData));
+      }
+      function loadSleepData() {
+        try {
+          const sleepData = JSON.parse(localStorage.getItem('vita-sleep-data') || '{}');
+          return sleepData[getTodayLocal()] || null;
+        } catch (e) { return null; }
+      }
+
+      // Custom tasks management
+      function addCustomTask(name) {
+        if (!name.trim()) return;
+        const id = 'custom_' + Date.now();
+        const updated = [...customTasks, { id, t: name.trim() }];
+        setCustomTasks(updated);
+        localStorage.setItem('vita-custom-tasks', JSON.stringify(updated));
+        setNewCustomTask('');
+      }
+      function removeCustomTask(id) {
+        const updated = customTasks.filter(t => t.id !== id);
+        setCustomTasks(updated);
+        localStorage.setItem('vita-custom-tasks', JSON.stringify(updated));
+      }
+      function toggleHideTask(id) {
+        const updated = hiddenTasks.includes(id) ? hiddenTasks.filter(x => x !== id) : [...hiddenTasks, id];
+        setHiddenTasks(updated);
+        localStorage.setItem('vita-hidden-tasks', JSON.stringify(updated));
+      }
+
+      // Body weight tracking
+      function logBodyWeight(weight) {
+        if (!weight) return;
+        const todayKey = getTodayLocal();
+        const entry = { date: todayKey, weight: parseFloat(weight), timestamp: Date.now() };
+        const existing = weightHistory.filter(w => w.date !== todayKey);
+        const updated = [entry, ...existing].sort((a, b) => new Date(b.date) - new Date(a.date));
+        setWeightHistory(updated);
+        localStorage.setItem('vita-weight-history', JSON.stringify(updated));
+        setBodyWeight('');
+        setSaveStatus('⚖️ Weight logged!');
+        setTimeout(() => setSaveStatus(''), 2000);
+      }
+
+      // Weekly review
+      function saveWeeklyReview(review) {
+        const weekKey = (() => {
+          const d = new Date();
+          const day = d.getDay();
+          const diff = d.getDate() - day;
+          return new Date(d.setDate(diff)).toISOString().split('T')[0];
+        })();
+        const reviews = JSON.parse(localStorage.getItem('vita-weekly-reviews') || '{}');
+        reviews[weekKey] = { ...review, savedAt: Date.now() };
+        localStorage.setItem('vita-weekly-reviews', JSON.stringify(reviews));
+        setShowWeeklyReview(false);
+        setSaveStatus('📋 Weekly review saved!');
+        setTimeout(() => setSaveStatus(''), 3000);
+      }
+
       // Knowledge Integration Functions
       function generateTodaysApplication() {
         const books = [
@@ -917,8 +1075,10 @@
         localStorage.setItem('vita-reading-history', JSON.stringify(updatedHistory));
 
         // Update reading progress stats
+        const isNewBook = entry.bookTitle && (!readingHistory.length || readingHistory[0].bookTitle !== entry.bookTitle);
         const updatedProgress = {
           ...readingProgress,
+          booksRead: readingProgress.booksRead + (isNewBook ? 1 : 0),
           pagesRead: readingProgress.pagesRead + parseInt(entry.pagesRead || 0),
           insightsGained: readingProgress.insightsGained + (entry.insights ? 1 : 0),
           currentStreak: isNewReadingDay ? readingProgress.currentStreak + 1 : readingProgress.currentStreak,
@@ -1166,7 +1326,7 @@
         // Analyze daily focus based on current patterns
         const today = new Date();
         const dayOfWeek = today.toLocaleDateString('en-US', { weekday: 'long' });
-        const recentWeek = history.slice(-7);
+        const recentWeek = history.slice(0, 7);
 
         // Daily focus analysis
         let dailyFocus = "";
@@ -1219,7 +1379,7 @@
         weeklyReview += "Next week, focus on sustaining your strongest habits while gently improving areas of opportunity.";
 
         // Monthly reflection (based on last 30 days)
-        const monthlyData = history.slice(-30);
+        const monthlyData = history.slice(0, 30);
         let monthlyReflection = "";
 
         if (monthlyData.length >= 30) {
@@ -1358,7 +1518,7 @@
         const priorityActions = [];
 
         // Check for immediate needs
-        const todayData = history[history.length - 1];
+        const todayData = history[0];
         if (todayData) {
           if (!todayData.mood) {
             priorityActions.push({
@@ -1933,15 +2093,42 @@
 
         const coachingMessage = getCoachingMessage();
 
-        // Extended habit tracking beyond core tasks
-        const extendedHabits = [
-          { id: 'reading', name: 'Read for 30+ minutes', category: 'learning', streak: 0 },
-          { id: 'meditation', name: 'Meditate or mindfulness', category: 'mindfulness', streak: 0 },
-          { id: 'networking', name: 'Connect with someone meaningful', category: 'social', streak: 0 },
-          { id: 'learning', name: 'Learn something new (skill/course)', category: 'growth', streak: 0 },
-          { id: 'gratitude', name: 'Write 3 things grateful for', category: 'mindfulness', streak: 0 },
-          { id: 'planning', name: 'Review and plan tomorrow', category: 'productivity', streak: 0 }
+        const habitDefs = [
+          { id: 'reading', name: 'Read for 30+ minutes', category: 'learning' },
+          { id: 'meditation', name: 'Meditate or mindfulness', category: 'mindfulness' },
+          { id: 'networking', name: 'Connect with someone meaningful', category: 'social' },
+          { id: 'learning', name: 'Learn something new (skill/course)', category: 'growth' },
+          { id: 'gratitude', name: 'Write 3 things grateful for', category: 'mindfulness' },
+          { id: 'planning', name: 'Review and plan tomorrow', category: 'productivity' }
         ];
+        const trackedHabitsRaw = JSON.parse(localStorage.getItem('vita-tracked-habits') || '{}');
+        const todayKey = getTodayLocal();
+        const todayTracked = trackedHabitsRaw[todayKey] || [];
+        const computeHabitStreak = (habitId) => {
+          let streak = 0;
+          const dates = Object.keys(trackedHabitsRaw).sort().reverse();
+          for (const dt of dates) {
+            if (trackedHabitsRaw[dt].includes(habitId)) streak++;
+            else break;
+          }
+          return streak;
+        };
+        const trackHabitToday = (habitId) => {
+          const raw = JSON.parse(localStorage.getItem('vita-tracked-habits') || '{}');
+          const today = getTodayLocal();
+          if (!raw[today]) raw[today] = [];
+          if (!raw[today].includes(habitId)) raw[today].push(habitId);
+          else raw[today] = raw[today].filter(h => h !== habitId);
+          localStorage.setItem('vita-tracked-habits', JSON.stringify(raw));
+          setSaveStatus('✅ Habit updated!');
+          setTimeout(() => setSaveStatus(''), 2000);
+          setView('coach');
+        };
+        const extendedHabits = habitDefs.map(h => ({
+          ...h,
+          streak: computeHabitStreak(h.id),
+          trackedToday: todayTracked.includes(h.id)
+        }));
 
         return (
           <div className="min-h-screen p-4">
@@ -2012,11 +2199,11 @@
                         </span>
                       </div>
                       <div className="flex gap-2">
-                        <button className="flex-1 py-2 bg-slate-600 text-white rounded text-sm hover:bg-slate-500">
-                          Track Today
+                        <button onClick={() => trackHabitToday(habit.id)} className={`flex-1 py-2 ${habit.trackedToday ? 'bg-green-600 hover:bg-green-700' : 'bg-slate-600 hover:bg-slate-500'} text-white rounded text-sm`}>
+                          {habit.trackedToday ? '✓ Done Today' : 'Track Today'}
                         </button>
                         <div className="px-3 py-2 bg-slate-600 rounded text-sm text-gray-300">
-                          Streak: 0 days
+                          Streak: {habit.streak} days
                         </div>
                       </div>
                     </div>
@@ -3883,7 +4070,7 @@
         // Data export functionality
         const exportData = () => {
           const exportData = {
-            version: '1.1.0',
+            version: '1.2.0',
             timestamp: new Date().toISOString(),
             app: 'Vita - Personal Development Tracker',
             data: {
@@ -3897,7 +4084,13 @@
               badges,
               aiCoachInsights,
               readingProgress,
-              readingHistory
+              readingHistory,
+              customTasks: JSON.parse(localStorage.getItem('vita-custom-tasks') || '[]'),
+              hiddenTasks: JSON.parse(localStorage.getItem('vita-hidden-tasks') || '[]'),
+              weightHistory: JSON.parse(localStorage.getItem('vita-weight-history') || '[]'),
+              sleepData: JSON.parse(localStorage.getItem('vita-sleep-data') || '{}'),
+              weeklyReviews: JSON.parse(localStorage.getItem('vita-weekly-reviews') || '{}'),
+              trackedHabits: JSON.parse(localStorage.getItem('vita-tracked-habits') || '{}')
             }
           };
 
@@ -3949,6 +4142,12 @@
               if (data.aiCoachInsights) localStorage.setItem('vita-ai-insights', JSON.stringify(data.aiCoachInsights));
               if (data.readingProgress) localStorage.setItem('vita-reading-progress', JSON.stringify(data.readingProgress));
               if (data.readingHistory) localStorage.setItem('vita-reading-history', JSON.stringify(data.readingHistory));
+              if (data.customTasks) localStorage.setItem('vita-custom-tasks', JSON.stringify(data.customTasks));
+              if (data.hiddenTasks) localStorage.setItem('vita-hidden-tasks', JSON.stringify(data.hiddenTasks));
+              if (data.weightHistory) localStorage.setItem('vita-weight-history', JSON.stringify(data.weightHistory));
+              if (data.sleepData) localStorage.setItem('vita-sleep-data', JSON.stringify(data.sleepData));
+              if (data.weeklyReviews) localStorage.setItem('vita-weekly-reviews', JSON.stringify(data.weeklyReviews));
+              if (data.trackedHabits) localStorage.setItem('vita-tracked-habits', JSON.stringify(data.trackedHabits));
 
               alert('✅ Data imported successfully! Refreshing the app...');
               window.location.reload();
@@ -4492,7 +4691,7 @@
                     const predictions = [];
 
                     // Workout prediction
-                    const recentWorkouts = history.slice(-7).filter(d => d.workoutDone).length;
+                    const recentWorkouts = history.slice(0, 7).filter(d => d.workoutDone).length;
                     if (recentWorkouts >= 4) {
                       predictions.push("High chance you'll complete tomorrow's workout based on your recent consistency!");
                     } else if (recentWorkouts <= 2) {
@@ -4500,7 +4699,7 @@
                     }
 
                     // Productivity prediction
-                    const avgTasks = history.slice(-7).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 7;
+                    const avgTasks = history.slice(0, 7).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 7;
                     if (avgTasks >= 12) {
                       predictions.push("You're on a productivity high - tomorrow could be another strong day!");
                     } else if (avgTasks <= 6) {
@@ -4508,7 +4707,7 @@
                     }
 
                     // Mood prediction based on recent patterns
-                    const recentMoods = history.slice(-3).filter(d => d.mood).map(d => d.mood);
+                    const recentMoods = history.slice(0, 3).filter(d => d.mood).map(d => d.mood);
                     if (recentMoods.length > 0) {
                       const mostCommonMood = recentMoods.sort((a,b) =>
                         recentMoods.filter(v => v===a).length - recentMoods.filter(v => v===b).length
@@ -4552,7 +4751,13 @@
             sleepQuality: day.done && day.done.some(task => task.includes('sleep')) ? 'good' : 'unknown',
             socialTime: day.done && day.done.some(task => task.includes('connect')) ? 'yes' : 'no',
             deepWork: day.deepWork ? parseFloat(day.deepWork) : 0,
-            nutritionLogged: false // We'll check nutrition data separately
+            nutritionLogged: (() => {
+              try {
+                const nd = JSON.parse(localStorage.getItem('vita-nutrition') || '{}');
+                const meals = nd[day.date];
+                return meals ? Object.values(meals).some(arr => Array.isArray(arr) && arr.length > 0) : false;
+              } catch (e) { return false; }
+            })()
           }));
 
           // Calculate correlations
@@ -4956,14 +5161,23 @@
           // Health Score (0-100) - based on workouts, nutrition, water, energy
           const healthScore = (() => {
             let score = 0;
-            const recent = history.slice(-7);
+            const recent = history.slice(0, 7);
 
             // Workout consistency (40% weight)
             const workoutRate = recent.filter(d => d.workoutDone).length / recent.length;
             score += workoutRate * 40;
 
-            // Nutrition tracking (30% weight)
-            const nutritionRate = recent.filter(d => d.done && d.done.some(task => task.includes('protein') || task.includes('meal'))).length / recent.length;
+            // Nutrition tracking (30% weight) - check actual nutrition data
+            const nutritionRate = (() => {
+              try {
+                const nd = JSON.parse(localStorage.getItem('vita-nutrition') || '{}');
+                return recent.filter(d => {
+                  const meals = nd[d.date];
+                  if (!meals) return false;
+                  return Object.values(meals).some(arr => Array.isArray(arr) && arr.length > 0);
+                }).length / recent.length;
+              } catch (e) { return 0; }
+            })();
             score += nutritionRate * 30;
 
             // Water intake (15% weight)
@@ -4981,7 +5195,7 @@
           // Productivity Score (0-100) - based on tasks, deep work, reading
           const productivityScore = (() => {
             let score = 0;
-            const recent = history.slice(-7);
+            const recent = history.slice(0, 7);
 
             // Task completion rate (50% weight)
             const avgTasks = recent.reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / recent.length;
@@ -5004,7 +5218,7 @@
           // Mood Score (0-100) - based on mood tracking and consistency
           const moodScore = (() => {
             let score = 0;
-            const recent = history.slice(-7);
+            const recent = history.slice(0, 7);
 
             // Positive mood ratio (60% weight)
             const moodData = recent.filter(d => d.mood);
@@ -5026,7 +5240,7 @@
           // Consistency Score (0-100) - based on daily tracking habits
           const consistencyScore = (() => {
             let score = 0;
-            const recent = history.slice(-7);
+            const recent = history.slice(0, 7);
 
             // Daily task completion (25% weight)
             const daysWithTasks = recent.filter(d => d.done && d.done.length > 0).length;
@@ -5051,28 +5265,28 @@
           const goalProgress = [
             {
               name: "Weekly Workouts",
-              current: history.slice(-7).filter(d => d.workoutDone).length,
+              current: history.slice(0, 7).filter(d => d.workoutDone).length,
               target: 5,
               unit: "workouts",
               color: "blue"
             },
             {
               name: "Daily Water Intake",
-              current: Math.round(history.slice(-7).reduce((sum, d) => sum + (d.water || 0), 0) / 7),
+              current: Math.round(history.slice(0, 7).reduce((sum, d) => sum + (d.water || 0), 0) / 7),
               target: 8,
               unit: "glasses",
               color: "cyan"
             },
             {
               name: "Task Completion",
-              current: Math.round(history.slice(-7).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 7),
+              current: Math.round(history.slice(0, 7).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 7),
               target: 15,
               unit: "tasks/day",
               color: "green"
             },
             {
               name: "Deep Work Hours",
-              current: Math.round(history.slice(-7).reduce((sum, d) => sum + (parseFloat(d.deepWork) || 0), 0) / 7 * 10) / 10,
+              current: Math.round(history.slice(0, 7).reduce((sum, d) => sum + (parseFloat(d.deepWork) || 0), 0) / 7 * 10) / 10,
               target: 3,
               unit: "hours/day",
               color: "purple"
@@ -5353,7 +5567,7 @@
                       <p className="text-2xl font-bold text-white">
                         {(() => {
                           const dayAverages = {};
-                          history.slice(-7).forEach(day => {
+                          history.slice(0, 7).forEach(day => {
                             const dayName = new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' });
                             if (!dayAverages[dayName]) dayAverages[dayName] = [];
                             dayAverages[dayName].push(day.done ? day.done.length : 0);
@@ -5393,8 +5607,8 @@
                       <p className="text-2xl font-bold text-white">
                         {(() => {
                           if (history.length < 14) return 'N/A';
-                          const recentWeek = history.slice(-7).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 7;
-                          const previousWeek = history.slice(-14, -7).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 7;
+                          const recentWeek = history.slice(0, 7).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 7;
+                          const previousWeek = history.slice(7, 14).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 7;
                           const improvement = ((recentWeek - previousWeek) / previousWeek) * 100;
                           return (improvement > 0 ? '+' : '') + Math.round(improvement) + '%';
                         })()}
@@ -5606,23 +5820,11 @@
                   <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full mx-4">
                     <h3 className="text-lg font-bold mb-4 text-amber-400">🎯 Create Custom Challenge</h3>
                     <div className="space-y-4">
-                      <input
-                        type="text"
-                        placeholder="Challenge title"
-                        className="w-full p-3 bg-slate-700 rounded-lg text-white placeholder-gray-400"
-                      />
-                      <textarea
-                        placeholder="Challenge description"
-                        className="w-full p-3 bg-slate-700 rounded-lg text-white placeholder-gray-400"
-                        rows="3"
-                      />
+                      <input type="text" placeholder="Challenge title" value={customChallengeForm.title} onChange={e => setCustomChallengeForm({...customChallengeForm, title: e.target.value})} className="w-full p-3 bg-slate-700 rounded-lg text-white placeholder-gray-400" />
+                      <textarea placeholder="Challenge description" value={customChallengeForm.description} onChange={e => setCustomChallengeForm({...customChallengeForm, description: e.target.value})} className="w-full p-3 bg-slate-700 rounded-lg text-white placeholder-gray-400" rows="3" />
                       <div className="grid grid-cols-2 gap-4">
-                        <input
-                          type="number"
-                          placeholder="Duration (days)"
-                          className="w-full p-3 bg-slate-700 rounded-lg text-white placeholder-gray-400"
-                        />
-                        <select className="w-full p-3 bg-slate-700 rounded-lg text-white">
+                        <input type="number" placeholder="Duration (days)" value={customChallengeForm.duration} onChange={e => setCustomChallengeForm({...customChallengeForm, duration: e.target.value})} className="w-full p-3 bg-slate-700 rounded-lg text-white placeholder-gray-400" />
+                        <select value={customChallengeForm.category} onChange={e => setCustomChallengeForm({...customChallengeForm, category: e.target.value})} className="w-full p-3 bg-slate-700 rounded-lg text-white">
                           <option value="">Category</option>
                           <option value="fitness">Fitness</option>
                           <option value="nutrition">Nutrition</option>
@@ -5632,16 +5834,23 @@
                           <option value="discipline">Discipline</option>
                         </select>
                       </div>
-                      <input
-                        type="text"
-                        placeholder="Reward badge name"
-                        className="w-full p-3 bg-slate-700 rounded-lg text-white placeholder-gray-400"
-                      />
+                      <input type="text" placeholder="Reward badge name" value={customChallengeForm.reward} onChange={e => setCustomChallengeForm({...customChallengeForm, reward: e.target.value})} className="w-full p-3 bg-slate-700 rounded-lg text-white placeholder-gray-400" />
                     </div>
                     <div className="flex gap-2 mt-6">
                       <button
                         onClick={() => {
-                          // Create custom challenge logic would go here
+                          if (!customChallengeForm.title || !customChallengeForm.duration) return;
+                          createChallenge({
+                            title: customChallengeForm.title,
+                            description: customChallengeForm.description || customChallengeForm.title,
+                            duration: parseInt(customChallengeForm.duration) || 7,
+                            category: customChallengeForm.category || 'discipline',
+                            type: 'habit',
+                            target: 1,
+                            unit: 'days',
+                            reward: customChallengeForm.reward || `${customChallengeForm.title} Badge`
+                          });
+                          setCustomChallengeForm({ title: '', description: '', duration: '', category: '', reward: '' });
                           setShowCreateChallenge(false);
                           setSaveStatus('🎯 Custom challenge created!');
                           setTimeout(() => setSaveStatus(''), 3000);
@@ -5935,28 +6144,28 @@
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                       <div className="bg-slate-700 rounded-lg p-3 text-center">
                         <p className="text-2xl font-bold text-blue-400">
-                          {Math.round(history.slice(-7).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 7 * 10) / 10}
+                          {Math.round(history.slice(0, 7).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 7 * 10) / 10}
                         </p>
                         <p className="text-xs text-gray-400">avg tasks/day</p>
                       </div>
                       <div className="bg-slate-700 rounded-lg p-3 text-center">
                         <p className="text-2xl font-bold text-green-400">
-                          {history.slice(-7).filter(d => d.workoutDone).length}
+                          {history.slice(0, 7).filter(d => d.workoutDone).length}
                         </p>
                         <p className="text-xs text-gray-400">workouts</p>
                       </div>
                       <div className="bg-slate-700 rounded-lg p-3 text-center">
                         <p className="text-2xl font-bold text-purple-400">
-                          {Math.round(history.slice(-7).filter(d => d.mood).map(d => {
+                          {Math.round(history.slice(0, 7).filter(d => d.mood).map(d => {
                             const scores = { '😊 Sharp': 5, '🙂 Good': 4, '😐 Okay': 3, '😔 Off': 2, '😰 Hard': 1 };
                             return scores[d.mood] || 3;
-                          }).reduce((a, b) => a + b, 0) / Math.max(1, history.slice(-7).filter(d => d.mood).length) * 10) / 10}
+                          }).reduce((a, b) => a + b, 0) / Math.max(1, history.slice(0, 7).filter(d => d.mood).length) * 10) / 10}
                         </p>
                         <p className="text-xs text-gray-400">avg mood</p>
                       </div>
                       <div className="bg-slate-700 rounded-lg p-3 text-center">
                         <p className="text-2xl font-bold text-yellow-400">
-                          {history.slice(-7).filter(d => d.done && d.done.some(task => task.includes('read'))).length}
+                          {history.slice(0, 7).filter(d => d.done && d.done.some(task => task.includes('read'))).length}
                         </p>
                         <p className="text-xs text-gray-400">reading days</p>
                       </div>
@@ -5997,13 +6206,13 @@
                       <div className="bg-slate-700 rounded-lg p-4">
                         <h4 className="font-medium mb-2 text-green-400">Maintain Your Strengths</h4>
                         <div className="space-y-2 text-sm text-gray-300">
-                          {history.slice(-7).filter(d => d.workoutDone).length >= 4 && (
+                          {history.slice(0, 7).filter(d => d.workoutDone).length >= 4 && (
                             <div>✅ Keep up the workout momentum</div>
                           )}
-                          {history.slice(-7).filter(d => d.done && d.done.some(task => task.includes('read'))).length >= 4 && (
+                          {history.slice(0, 7).filter(d => d.done && d.done.some(task => task.includes('read'))).length >= 4 && (
                             <div>✅ Continue your reading streak</div>
                           )}
-                          {history.slice(-7).filter(d => d.mood).length >= 5 && (
+                          {history.slice(0, 7).filter(d => d.mood).length >= 5 && (
                             <div>✅ Maintain mood tracking consistency</div>
                           )}
                         </div>
@@ -6012,13 +6221,13 @@
                       <div className="bg-slate-700 rounded-lg p-4">
                         <h4 className="font-medium mb-2 text-blue-400">Areas for Growth</h4>
                         <div className="space-y-2 text-sm text-gray-300">
-                          {history.slice(-7).filter(d => d.done && d.done.length > 0).length < 5 && (
+                          {history.slice(0, 7).filter(d => d.done && d.done.length > 0).length < 5 && (
                             <div>🎯 Increase daily task completion</div>
                           )}
-                          {history.slice(-7).filter(d => d.workoutDone).length < 3 && (
+                          {history.slice(0, 7).filter(d => d.workoutDone).length < 3 && (
                             <div>🎯 Build workout consistency</div>
                           )}
-                          {history.slice(-7).filter(d => d.mood).length < 4 && (
+                          {history.slice(0, 7).filter(d => d.mood).length < 4 && (
                             <div>🎯 Track mood more regularly</div>
                           )}
                         </div>
@@ -6059,13 +6268,13 @@
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                         <div className="bg-slate-700 rounded-lg p-3 text-center">
                           <p className="text-2xl font-bold text-indigo-400">
-                            {Math.round(history.slice(-30).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 30 * 10) / 10}
+                            {Math.round(history.slice(0, 30).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 30 * 10) / 10}
                           </p>
                           <p className="text-xs text-gray-400">avg tasks/day</p>
                         </div>
                         <div className="bg-slate-700 rounded-lg p-3 text-center">
                           <p className="text-2xl font-bold text-green-400">
-                            {Math.round((history.slice(-30).filter(d => d.workoutDone).length / 30) * 100)}%
+                            {Math.round((history.slice(0, 30).filter(d => d.workoutDone).length / 30) * 100)}%
                           </p>
                           <p className="text-xs text-gray-400">workout rate</p>
                         </div>
@@ -6074,7 +6283,7 @@
                             {(() => {
                               let currentStreak = 0;
                               let maxStreak = 0;
-                              for (const day of history.slice(-30)) {
+                              for (const day of history.slice(0, 30)) {
                                 if (day.done && day.done.length > 0) {
                                   currentStreak++;
                                   maxStreak = Math.max(maxStreak, currentStreak);
@@ -6089,7 +6298,7 @@
                         </div>
                         <div className="bg-slate-700 rounded-lg p-3 text-center">
                           <p className="text-2xl font-bold text-yellow-400">
-                            {Math.round((history.slice(-30).filter(d => d.mood).length / 30) * 100)}%
+                            {Math.round((history.slice(0, 30).filter(d => d.mood).length / 30) * 100)}%
                           </p>
                           <p className="text-xs text-gray-400">mood tracking</p>
                         </div>
@@ -6105,13 +6314,13 @@
                         <div className="bg-slate-700 rounded-lg p-4">
                           <h4 className="font-medium mb-3 text-red-400">Needs Attention</h4>
                           <div className="space-y-2 text-sm text-gray-300">
-                            {history.slice(-30).filter(d => d.workoutDone).length / 30 < 0.5 && (
+                            {history.slice(0, 30).filter(d => d.workoutDone).length / 30 < 0.5 && (
                               <div>• Physical activity consistency</div>
                             )}
-                            {history.slice(-30).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 30 < 10 && (
+                            {history.slice(0, 30).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 30 < 10 && (
                               <div>• Daily productivity volume</div>
                             )}
-                            {history.slice(-30).filter(d => d.mood).length / 30 < 0.6 && (
+                            {history.slice(0, 30).filter(d => d.mood).length / 30 < 0.6 && (
                               <div>• Emotional awareness tracking</div>
                             )}
                           </div>
@@ -6120,13 +6329,13 @@
                         <div className="bg-slate-700 rounded-lg p-4">
                           <h4 className="font-medium mb-3 text-green-400">Strengths to Build On</h4>
                           <div className="space-y-2 text-sm text-gray-300">
-                            {history.slice(-30).filter(d => d.workoutDone).length / 30 >= 0.7 && (
+                            {history.slice(0, 30).filter(d => d.workoutDone).length / 30 >= 0.7 && (
                               <div>• Excellent physical discipline</div>
                             )}
-                            {history.slice(-30).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 30 >= 15 && (
+                            {history.slice(0, 30).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 30 >= 15 && (
                               <div>• Strong productivity habits</div>
                             )}
-                            {history.slice(-30).filter(d => d.mood).length / 30 >= 0.8 && (
+                            {history.slice(0, 30).filter(d => d.mood).length / 30 >= 0.8 && (
                               <div>• Good emotional awareness</div>
                             )}
                           </div>
@@ -6145,13 +6354,13 @@
                           Based on your patterns, consider committing to one significant challenge next month:
                         </p>
                         <div className="mt-3 space-y-2">
-                          {history.slice(-30).filter(d => d.workoutDone).length / 30 < 0.6 && (
+                          {history.slice(0, 30).filter(d => d.workoutDone).length / 30 < 0.6 && (
                             <div className="text-sm text-amber-400">• 20-workout fitness challenge</div>
                           )}
-                          {history.slice(-30).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 30 < 12 && (
+                          {history.slice(0, 30).reduce((sum, d) => sum + (d.done ? d.done.length : 0), 0) / 30 < 12 && (
                             <div className="text-sm text-amber-400">• 20-task daily productivity goal</div>
                           )}
-                          {history.slice(-30).filter(d => d.done && d.done.some(task => task.includes('read'))).length < 15 && (
+                          {history.slice(0, 30).filter(d => d.done && d.done.some(task => task.includes('read'))).length < 15 && (
                             <div className="text-sm text-amber-400">• Daily reading habit (20+ days)</div>
                           )}
                         </div>
@@ -6645,12 +6854,20 @@
         );
       }
 
-      const allTasks = [...tasks.core, ...tasks.lead, ...tasks.comm];
+      const baseTasks = [...tasks.core, ...tasks.lead, ...tasks.comm];
+      const allTasks = [...baseTasks.filter(t => !hiddenTasks.includes(t.id)), ...customTasks.filter(t => !hiddenTasks.includes(t.id))];
       const total = allTasks.length;
-      const done = data.done ? data.done.length : 0;
+      const done = data.done ? data.done.filter(id => allTasks.some(t => t.id === id)).length : 0;
       const streak = getStreak();
       const hasFocus = focusTasks && focusTasks.length > 0;
       const focusDone = hasFocus ? focusTasks.filter(id => data.done.includes(id)).length : 0;
+      const morningBrief = getMorningBrief();
+      const todaySleepData = loadSleepData();
+      const todayPrompt = getTodaysPrompt();
+      const isSunday = new Date().getDay() === 0;
+      const visibleCoreTasks = tasks.core.filter(t => !hiddenTasks.includes(t.id));
+      const visibleLeadTasks = tasks.lead.filter(t => !hiddenTasks.includes(t.id));
+      const visibleCommTasks = tasks.comm.filter(t => !hiddenTasks.includes(t.id));
 
       return (
         <div className="min-h-screen p-4">
@@ -6725,6 +6942,94 @@
             {done > 0 && done >= total && (
               <div className="bg-gradient-to-r from-green-900/40 to-emerald-900/40 border border-green-700/50 rounded-xl p-4 mb-6 text-center">
                 <p className="text-green-300 font-bold text-lg">Perfect day — all {total} tasks complete</p>
+              </div>
+            )}
+
+            {/* Morning Brief */}
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-5 mb-6 border border-slate-700">
+              <h3 className="text-lg font-bold mb-2">{morningBrief.greeting}.</h3>
+              <p className="text-sm text-gray-400 mb-3">It's {morningBrief.dayName}. You averaged {morningBrief.avgTasks} tasks/day this week with {morningBrief.workoutsThisWeek} workouts.</p>
+              <div className="space-y-1">
+                {morningBrief.tips.map((tip, i) => (
+                  <p key={i} className="text-sm text-amber-300">• {tip}</p>
+                ))}
+              </div>
+            </div>
+
+            {/* Sleep/Wake Logging */}
+            <div className="bg-slate-800 rounded-xl p-5 mb-6 border border-slate-700">
+              <h3 className="text-sm font-medium text-gray-400 mb-3">🌙 Sleep & Wake</h3>
+              {todaySleepData ? (
+                <div className="flex items-center justify-between">
+                  <div className="flex gap-4">
+                    <span className="text-sm text-gray-300">Slept: <strong className="text-indigo-400">{todaySleepData.sleep}</strong></span>
+                    <span className="text-sm text-gray-300">Woke: <strong className="text-amber-400">{todaySleepData.wake}</strong></span>
+                    {todaySleepData.sleep && todaySleepData.wake && (() => {
+                      const [sh, sm] = todaySleepData.sleep.split(':').map(Number);
+                      const [wh, wm] = todaySleepData.wake.split(':').map(Number);
+                      let mins = (wh * 60 + wm) - (sh * 60 + sm);
+                      if (mins < 0) mins += 1440;
+                      const hrs = Math.floor(mins / 60);
+                      const m = mins % 60;
+                      return <span className="text-sm text-green-400">({hrs}h {m}m)</span>;
+                    })()}
+                  </div>
+                  <button onClick={() => { localStorage.removeItem('vita-sleep-data'); setSaveStatus(''); setView('today'); }} className="text-xs text-gray-500 hover:text-gray-300">Edit</button>
+                </div>
+              ) : (
+                <div className="flex gap-3 items-end">
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-500 block mb-1">Bedtime</label>
+                    <input type="time" value={sleepTime} onChange={e => setSleepTime(e.target.value)} className="w-full p-2 bg-slate-700 rounded text-white text-sm" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-500 block mb-1">Wake time</label>
+                    <input type="time" value={wakeTime} onChange={e => setWakeTime(e.target.value)} className="w-full p-2 bg-slate-700 rounded text-white text-sm" />
+                  </div>
+                  <button onClick={() => { if (sleepTime && wakeTime) { saveSleepData(sleepTime, wakeTime); setSleepTime(''); setWakeTime(''); setSaveStatus('🌙 Sleep logged!'); setTimeout(() => setSaveStatus(''), 2000); }}} className="px-4 py-2 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700">Log</button>
+                </div>
+              )}
+            </div>
+
+            {/* Weekly Review prompt (shows on Sundays) */}
+            {isSunday && !showWeeklyReview && (
+              <div className="bg-gradient-to-r from-indigo-900/40 to-purple-900/40 border border-indigo-700/50 rounded-xl p-4 mb-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-indigo-300 font-medium">📋 Sunday Weekly Review</p>
+                    <p className="text-xs text-gray-400 mt-1">Reflect on your week and set intentions for the next one</p>
+                  </div>
+                  <button onClick={() => setShowWeeklyReview(true)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">Start Review</button>
+                </div>
+              </div>
+            )}
+            {showWeeklyReview && (
+              <div className="bg-slate-800 rounded-xl p-5 mb-6 border border-indigo-700">
+                <h3 className="text-lg font-bold mb-4 text-indigo-400">📋 Weekly Review</h3>
+                <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+                  <div className="bg-slate-700 rounded-lg p-3 text-center">
+                    <p className="text-gray-400 text-xs">Tasks completed</p>
+                    <p className="text-2xl font-bold text-blue-400">{history.slice(0, 7).reduce((s, d) => s + (d.done ? d.done.length : 0), 0)}</p>
+                  </div>
+                  <div className="bg-slate-700 rounded-lg p-3 text-center">
+                    <p className="text-gray-400 text-xs">Workouts</p>
+                    <p className="text-2xl font-bold text-green-400">{history.slice(0, 7).filter(d => d.workoutDone).length}</p>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-sm text-gray-400 block mb-1">What went well this week?</label>
+                    <textarea value={weeklyReviewText.wentWell} onChange={e => setWeeklyReviewText({...weeklyReviewText, wentWell: e.target.value})} className="w-full p-3 bg-slate-700 rounded text-white text-sm" rows="3" placeholder="Wins, breakthroughs, things you're proud of..." />
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-400 block mb-1">Focus for next week</label>
+                    <textarea value={weeklyReviewText.nextWeekFocus} onChange={e => setWeeklyReviewText({...weeklyReviewText, nextWeekFocus: e.target.value})} className="w-full p-3 bg-slate-700 rounded text-white text-sm" rows="3" placeholder="Key goals, habits to improve, priorities..." />
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <button onClick={() => saveWeeklyReview(weeklyReviewText)} className="flex-1 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Save Review</button>
+                  <button onClick={() => setShowWeeklyReview(false)} className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-500">Cancel</button>
+                </div>
               </div>
             )}
 
@@ -6832,9 +7137,69 @@
                   All Tasks ({done}/{total} complete) — tap to expand
                 </summary>
                 <div className="mt-2 space-y-4">
+                  {visibleCoreTasks.length > 0 && (
+                    <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
+                      <h3 className="mb-3 text-sm font-medium text-gray-400">Non-Negotiables</h3>
+                      {visibleCoreTasks.map(t => (
+                        <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-green-900 border-2 border-green-500' : 'bg-slate-700'}`}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">{t.t}</span>
+                            {data.done.includes(t.id) && <span>✅</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {visibleLeadTasks.length > 0 && (
+                    <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
+                      <h3 className="mb-3 text-sm font-medium text-gray-400">Leadership</h3>
+                      {visibleLeadTasks.map(t => (
+                        <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-amber-900 border-2 border-amber-500' : 'bg-slate-700'}`}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">{t.t}</span>
+                            {data.done.includes(t.id) && <span>✅</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {visibleCommTasks.length > 0 && (
+                    <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
+                      <h3 className="mb-3 text-sm font-medium text-gray-400">Communication</h3>
+                      {visibleCommTasks.map(t => (
+                        <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-purple-900 border-2 border-purple-500' : 'bg-slate-700'}`}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">{t.t}</span>
+                            {data.done.includes(t.id) && <span>✅</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {customTasks.filter(t => !hiddenTasks.includes(t.id)).length > 0 && (
+                    <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
+                      <h3 className="mb-3 text-sm font-medium text-gray-400">My Tasks</h3>
+                      {customTasks.filter(t => !hiddenTasks.includes(t.id)).map(t => (
+                        <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-cyan-900 border-2 border-cyan-500' : 'bg-slate-700'}`}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">{t.t}</span>
+                            {data.done.includes(t.id) && <span>✅</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </details>
+            )}
+
+            {/* Show all tasks without collapsing when no focus selected */}
+            {!hasFocus && (
+              <div className="space-y-4 mb-6">
+                {visibleCoreTasks.length > 0 && (
                   <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
                     <h3 className="mb-3 text-sm font-medium text-gray-400">Non-Negotiables</h3>
-                    {tasks.core.map(t => (
+                    {visibleCoreTasks.map(t => (
                       <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-green-900 border-2 border-green-500' : 'bg-slate-700'}`}>
                         <div className="flex items-center justify-between">
                           <span className="text-sm">{t.t}</span>
@@ -6843,9 +7208,11 @@
                       </div>
                     ))}
                   </div>
+                )}
+                {visibleLeadTasks.length > 0 && (
                   <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
                     <h3 className="mb-3 text-sm font-medium text-gray-400">Leadership</h3>
-                    {tasks.lead.map(t => (
+                    {visibleLeadTasks.map(t => (
                       <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-amber-900 border-2 border-amber-500' : 'bg-slate-700'}`}>
                         <div className="flex items-center justify-between">
                           <span className="text-sm">{t.t}</span>
@@ -6854,9 +7221,11 @@
                       </div>
                     ))}
                   </div>
+                )}
+                {visibleCommTasks.length > 0 && (
                   <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
                     <h3 className="mb-3 text-sm font-medium text-gray-400">Communication</h3>
-                    {tasks.comm.map(t => (
+                    {visibleCommTasks.map(t => (
                       <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-purple-900 border-2 border-purple-500' : 'bg-slate-700'}`}>
                         <div className="flex items-center justify-between">
                           <span className="text-sm">{t.t}</span>
@@ -6865,53 +7234,167 @@
                       </div>
                     ))}
                   </div>
-                </div>
-              </details>
-            )}
-
-            {/* Show all tasks without collapsing when no focus selected */}
-            {!hasFocus && (
-              <div className="space-y-4 mb-6">
-                <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
-                  <h3 className="mb-3 text-sm font-medium text-gray-400">Non-Negotiables</h3>
-                  {tasks.core.map(t => (
-                    <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-green-900 border-2 border-green-500' : 'bg-slate-700'}`}>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm">{t.t}</span>
-                        {data.done.includes(t.id) && <span>✅</span>}
+                )}
+                {customTasks.filter(t => !hiddenTasks.includes(t.id)).length > 0 && (
+                  <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
+                    <h3 className="mb-3 text-sm font-medium text-gray-400">My Tasks</h3>
+                    {customTasks.filter(t => !hiddenTasks.includes(t.id)).map(t => (
+                      <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-cyan-900 border-2 border-cyan-500' : 'bg-slate-700'}`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">{t.t}</span>
+                          {data.done.includes(t.id) && <span>✅</span>}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
-                  <h3 className="mb-3 text-sm font-medium text-gray-400">Leadership</h3>
-                  {tasks.lead.map(t => (
-                    <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-amber-900 border-2 border-amber-500' : 'bg-slate-700'}`}>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm">{t.t}</span>
-                        {data.done.includes(t.id) && <span>✅</span>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
-                  <h3 className="mb-3 text-sm font-medium text-gray-400">Communication</h3>
-                  {tasks.comm.map(t => (
-                    <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-purple-900 border-2 border-purple-500' : 'bg-slate-700'}`}>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm">{t.t}</span>
-                        {data.done.includes(t.id) && <span>✅</span>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Reflection — auto-saves on blur */}
-            <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
-              <h3 className="text-sm font-medium text-gray-400 mb-3">📚 Reflection</h3>
+            {/* Body Weight Tracking */}
+            <div className="bg-slate-800 rounded-xl p-5 mb-6 border border-slate-700">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-sm font-medium text-gray-400">⚖️ Body Weight</h3>
+                {weightHistory.length > 0 && (
+                  <button onClick={() => setShowWeightLog(!showWeightLog)} className="text-xs text-gray-500 hover:text-gray-300">{showWeightLog ? 'Hide' : 'History'}</button>
+                )}
+              </div>
+              {weightHistory.length > 0 && weightHistory[0].date === getTodayLocal() ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-lg font-bold text-cyan-400">{weightHistory[0].weight} lbs</span>
+                  {weightHistory.length >= 2 && (() => {
+                    const diff = (weightHistory[0].weight - weightHistory[1].weight).toFixed(1);
+                    return <span className={`text-sm ${diff > 0 ? 'text-red-400' : diff < 0 ? 'text-green-400' : 'text-gray-400'}`}>{diff > 0 ? '+' : ''}{diff} lbs</span>;
+                  })()}
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input type="number" step="0.1" value={bodyWeight} onChange={e => setBodyWeight(e.target.value)} placeholder="Weight (lbs)" className="flex-1 p-2 bg-slate-700 rounded text-white text-sm" />
+                  <button onClick={() => logBodyWeight(bodyWeight)} className="px-4 py-2 bg-cyan-600 text-white rounded text-sm hover:bg-cyan-700">Log</button>
+                </div>
+              )}
+              {showWeightLog && weightHistory.length > 0 && (
+                <div className="mt-3 space-y-1 max-h-40 overflow-y-auto">
+                  {weightHistory.slice(0, 14).map((w, i) => (
+                    <div key={i} className="flex justify-between text-xs text-gray-400 py-1 border-b border-slate-700">
+                      <span>{new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                      <span className="text-white">{w.weight} lbs</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Custom Task Management */}
+            <div className="bg-slate-800 rounded-xl p-5 mb-6 border border-slate-700">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-sm font-medium text-gray-400">✏️ Manage Tasks</h3>
+                <button onClick={() => setShowManageTasks(!showManageTasks)} className="text-xs text-gray-500 hover:text-gray-300">{showManageTasks ? 'Close' : 'Open'}</button>
+              </div>
+              {showManageTasks && (
+                <div>
+                  <div className="flex gap-2 mb-4">
+                    <input type="text" value={newCustomTask} onChange={e => setNewCustomTask(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addCustomTask(newCustomTask); }} placeholder="Add a custom task..." className="flex-1 p-2 bg-slate-700 rounded text-white text-sm" />
+                    <button onClick={() => addCustomTask(newCustomTask)} className="px-4 py-2 bg-emerald-600 text-white rounded text-sm hover:bg-emerald-700">Add</button>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-2">Tap to hide/show. Red = hidden.</p>
+                  <div className="space-y-1 max-h-60 overflow-y-auto">
+                    {[...tasks.core, ...tasks.lead, ...tasks.comm].map(t => (
+                      <div key={t.id} onClick={() => toggleHideTask(t.id)} className={`p-2 rounded text-sm cursor-pointer flex items-center justify-between ${hiddenTasks.includes(t.id) ? 'bg-red-900/30 text-red-300 line-through' : 'bg-slate-700 text-gray-300'}`}>
+                        <span>{t.t}</span>
+                        <span className="text-xs">{hiddenTasks.includes(t.id) ? 'Hidden' : '✓'}</span>
+                      </div>
+                    ))}
+                    {customTasks.map(t => (
+                      <div key={t.id} className="p-2 rounded text-sm bg-slate-700 text-gray-300 flex items-center justify-between">
+                        <span className={hiddenTasks.includes(t.id) ? 'line-through text-red-300' : ''}>{t.t}</span>
+                        <div className="flex gap-2">
+                          <button onClick={() => toggleHideTask(t.id)} className="text-xs text-gray-500 hover:text-gray-300">{hiddenTasks.includes(t.id) ? 'Show' : 'Hide'}</button>
+                          <button onClick={() => removeCustomTask(t.id)} className="text-xs text-red-400 hover:text-red-300">Delete</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Mood-to-Action Correlations quick insight */}
+            {history.length >= 7 && (() => {
+              const moodScores = { '😊 Sharp': 5, '🙂 Good': 4, '😐 Okay': 3, '😔 Off': 2, '😰 Hard': 1 };
+              const recent = history.slice(0, 14).filter(d => d.mood);
+              if (recent.length < 3) return null;
+              const workoutDays = recent.filter(d => d.workoutDone);
+              const noWorkoutDays = recent.filter(d => !d.workoutDone);
+              const avgMoodWorkout = workoutDays.length > 0 ? (workoutDays.reduce((s, d) => s + (moodScores[d.mood] || 3), 0) / workoutDays.length).toFixed(1) : null;
+              const avgMoodNoWorkout = noWorkoutDays.length > 0 ? (noWorkoutDays.reduce((s, d) => s + (moodScores[d.mood] || 3), 0) / noWorkoutDays.length).toFixed(1) : null;
+              const avgWaterGood = recent.filter(d => (d.water || 0) >= 6);
+              const avgWaterLow = recent.filter(d => (d.water || 0) < 6);
+              const moodHighWater = avgWaterGood.length > 0 ? (avgWaterGood.reduce((s, d) => s + (moodScores[d.mood] || 3), 0) / avgWaterGood.length).toFixed(1) : null;
+              const moodLowWater = avgWaterLow.length > 0 ? (avgWaterLow.reduce((s, d) => s + (moodScores[d.mood] || 3), 0) / avgWaterLow.length).toFixed(1) : null;
+
+              return (
+                <div className="bg-slate-800 rounded-xl p-5 mb-6 border border-slate-700">
+                  <h3 className="text-sm font-medium text-gray-400 mb-3">🔗 Mood-Action Correlations</h3>
+                  <div className="space-y-2 text-sm">
+                    {avgMoodWorkout && avgMoodNoWorkout && (
+                      <div className="flex items-center justify-between p-2 bg-slate-700 rounded">
+                        <span className="text-gray-300">Workout days vs rest days</span>
+                        <span className={`font-bold ${parseFloat(avgMoodWorkout) > parseFloat(avgMoodNoWorkout) ? 'text-green-400' : 'text-gray-400'}`}>
+                          {avgMoodWorkout} vs {avgMoodNoWorkout}
+                        </span>
+                      </div>
+                    )}
+                    {moodHighWater && moodLowWater && (
+                      <div className="flex items-center justify-between p-2 bg-slate-700 rounded">
+                        <span className="text-gray-300">Good hydration vs low</span>
+                        <span className={`font-bold ${parseFloat(moodHighWater) > parseFloat(moodLowWater) ? 'text-blue-400' : 'text-gray-400'}`}>
+                          {moodHighWater} vs {moodLowWater}
+                        </span>
+                      </div>
+                    )}
+                    <p className="text-xs text-gray-500 mt-1">Based on your last 14 days. Higher = better mood (1-5 scale).</p>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Reflection with rotating journal prompt — auto-saves on blur */}
+            <div className="bg-slate-800 rounded-xl p-5 mb-6 border border-slate-700">
+              <h3 className="text-sm font-medium text-gray-400 mb-2">📚 Reflection</h3>
+              <p className="text-xs text-amber-400/80 mb-3 italic">Prompt: {todayPrompt}</p>
               <textarea value={journal} onChange={e => setJournal(e.target.value)} onBlur={async () => { const nd = { ...data, journal }; const cleanData = JSON.parse(JSON.stringify(nd)); setData(cleanData); await save(cleanData); }} placeholder="What did I lead? What did I ship? How did I grow?" className="w-full p-3 bg-slate-700 rounded text-white text-sm" rows="3" />
+            </div>
+
+            {/* Today Summary Card */}
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-5 border border-slate-700">
+              <h3 className="text-sm font-medium text-gray-400 mb-3">📊 Today's Summary</h3>
+              <div className="grid grid-cols-4 gap-3 text-center">
+                <div>
+                  <p className="text-xl font-bold text-amber-400">{done}/{total}</p>
+                  <p className="text-xs text-gray-500">Tasks</p>
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-blue-400">{water}/8</p>
+                  <p className="text-xs text-gray-500">Water</p>
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-purple-400">{data.mood ? data.mood.split(' ')[0] : '—'}</p>
+                  <p className="text-xs text-gray-500">Mood</p>
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-green-400">{data.workoutDone ? '✅' : '—'}</p>
+                  <p className="text-xs text-gray-500">Workout</p>
+                </div>
+              </div>
+              <div className="mt-3 w-full bg-slate-700 rounded-full h-2">
+                <div className="h-2 rounded-full bg-amber-500 transition-all duration-500" style={{ width: `${total > 0 ? (done/total)*100 : 0}%` }} />
+              </div>
+              <p className="text-xs text-gray-500 text-center mt-2">
+                {done === 0 ? "Let's get started" : done < total / 2 ? 'Making progress' : done < total ? 'Almost there' : 'Perfect day'}
+                {deepWork ? ` • ${deepWork}h deep work` : ''}
+                {todaySleepData ? ` • Sleep logged` : ''}
+              </p>
             </div>
 
           </div>
