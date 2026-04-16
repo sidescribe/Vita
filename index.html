@@ -228,12 +228,19 @@
             saveStore(); render(); el.note.value = ''; el.days.value = '365';
           }
 
+          if (el.save.dataset.boundEncNotes === '1') {
+            render();
+            return;
+          }
+
+          el.save.dataset.boundEncNotes = '1';
+          el.clear.dataset.boundEncNotes = '1';
           el.save.addEventListener('click', ()=>{ const t = el.note.value.trim(); if(!t) return alert('Enter a note.'); addNote(t, el.days.value); });
           el.clear.addEventListener('click', ()=>{ if(confirm('Clear ALL encapsulated notes?')){ notes=[]; saveStore(); render(); } });
           render();
         } catch (e) { console.error('initEncapsulatedNotes error', e); }
       }
-      // Initialize encapsulated notes and tracker when AI Coach view becomes active
+      // Initialize encapsulated notes and tracker when the affirmations view becomes active
       function initTracker() {
         try {
           const KEY = 'vita-tracker-events-v1'
@@ -297,6 +304,13 @@
 
           function addOrUpdate(){ const title = el.title.value.trim(); const date = el.date.value; const recurrence = el.recurrence.value; if(!title || !date) return alert('Please provide title and date.'); if(editingId){ events = events.map(ev => ev.id===editingId ? {...ev, title, date, recurrence } : ev); editingId = null; el.save.textContent = 'Save Event' } else { events.push({ id: Date.now().toString(36), title, date, recurrence, created: Date.now() }) } el.title.value = ''; el.date.value = ''; el.recurrence.value='none'; saveStore(); render() }
 
+          if (el.save.dataset.boundTracker === '1') {
+            render()
+            return
+          }
+
+          el.save.dataset.boundTracker = '1'
+          el.clear.dataset.boundTracker = '1'
           el.save.addEventListener('click', addOrUpdate)
           el.clear.addEventListener('click', ()=>{ if(confirm('Clear ALL events?')){ events=[]; saveStore(); render() } })
 
@@ -305,12 +319,13 @@
       }
 
       useEffect(() => {
-        if (view === 'coach-ai') {
-          setTimeout(() => {
+        if (view === 'affirmations') {
+          const timer = setTimeout(() => {
             try { initEncapsulatedNotes(); initTracker(); } catch (e) { console.error(e); }
           }, 50);
+          return () => clearTimeout(timer);
         }
-      }, [view]);
+      }, [view, categoryAffirmations]);
 
       const tasks = {
         core: [
@@ -7417,8 +7432,6 @@
       });
     }
   </script>
-</body>
-</script>
 
 <!-- Standalone initializers: ensure tracker and encapsulated notes render on page load -->
 <script>
