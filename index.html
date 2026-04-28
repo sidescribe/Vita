@@ -67,6 +67,7 @@
       const [nutritionData, setNutritionData] = useState({});
       const [showAddFood, setShowAddFood] = useState(false);
       const [selectedMeal, setSelectedMeal] = useState('breakfast');
+      const [customFood, setCustomFood] = useState({ name: '', calories: '', protein: '', carbs: '', fat: '' });
       const [saveStatus, setSaveStatus] = useState('');
       const [isExisting, setIsExisting] = useState(false);
       const [energyLevel, setEnergyLevel] = useState(null);
@@ -110,7 +111,6 @@
       const [showDataModal, setShowDataModal] = useState(false); // Data management modal
       const [backupBanner, setBackupBanner] = useState(null);
       const [showMoreNav, setShowMoreNav] = useState(false);
-      const [focusTasks, setFocusTasks] = useState(null);
       const [sleepTime, setSleepTime] = useState('');
       const [wakeTime, setWakeTime] = useState('');
       const [weeklyReview, setWeeklyReview] = useState(null);
@@ -409,15 +409,8 @@
         }
       }, []);
 
-      // Load focus tasks, custom tasks, hidden tasks, weight history from localStorage
+      // Load custom tasks, hidden tasks, weight history from localStorage
       useEffect(() => {
-        try {
-          const savedFocus = localStorage.getItem('vita-focus-tasks');
-          if (savedFocus) {
-            const parsed = JSON.parse(savedFocus);
-            if (parsed.date === getTodayLocal()) setFocusTasks(parsed.tasks);
-          }
-        } catch (e) {}
         try {
           const saved = localStorage.getItem('vita-custom-tasks');
           if (saved) setCustomTasks(JSON.parse(saved));
@@ -829,20 +822,6 @@
           }
         }
         return streak;
-      }
-
-      function toggleFocusTask(taskId) {
-        const allTasks = [...tasks.core, ...tasks.lead, ...tasks.comm];
-        const current = focusTasks || [];
-        let updated;
-        if (current.includes(taskId)) {
-          updated = current.filter(id => id !== taskId);
-        } else {
-          if (current.length >= 5) return;
-          updated = [...current, taskId];
-        }
-        setFocusTasks(updated);
-        localStorage.setItem('vita-focus-tasks', JSON.stringify({ date: getTodayLocal(), tasks: updated }));
       }
 
       // Morning Brief generator
@@ -4047,10 +4026,10 @@
 
         const dailyTotals = calculateTotals();
 
-        const addFood = (food) => {
+        const addFoodToMeal = (food, mealType = selectedMeal, options = {}) => {
           const updatedMeals = {
             ...todaysMeals,
-            [selectedMeal]: [...todaysMeals[selectedMeal], food]
+            [mealType]: [...todaysMeals[mealType], food]
           };
           const updatedNutrition = {
             ...nutritionData,
@@ -4058,7 +4037,21 @@
           };
           setNutritionData(updatedNutrition);
           localStorage.setItem('vita-nutrition', JSON.stringify(updatedNutrition));
-          setShowAddFood(false);
+          if (options.closeModal !== false) setShowAddFood(false);
+        };
+
+        const addFood = (food) => addFoodToMeal(food, selectedMeal);
+
+        const addCustomFood = () => {
+          if (!customFood.name.trim()) return;
+          addFood({
+            name: customFood.name.trim(),
+            calories: parseInt(customFood.calories) || 0,
+            protein: parseInt(customFood.protein) || 0,
+            carbs: parseInt(customFood.carbs) || 0,
+            fat: parseInt(customFood.fat) || 0
+          });
+          setCustomFood({ name: '', calories: '', protein: '', carbs: '', fat: '' });
         };
 
         const removeFood = (mealType, index) => {
@@ -4073,6 +4066,72 @@
           setNutritionData(updatedNutrition);
           localStorage.setItem('vita-nutrition', JSON.stringify(updatedNutrition));
         };
+
+        const getYesterdayKey = () => {
+          const date = new Date();
+          date.setDate(date.getDate() - 1);
+          const y = date.getFullYear();
+          const m = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          return `${y}-${m}-${day}`;
+        };
+
+        const getNutritionHistory = () => {
+          return Object.entries(nutritionData || {})
+            .filter(([date]) => date !== todayKey)
+            .sort(([a], [b]) => new Date(b) - new Date(a));
+        };
+
+        const getFrequentFoods = (mealType = null, limit = 6) => {
+          const counts = {};
+          getNutritionHistory().forEach(([, meals]) => {
+            const mealEntries = mealType ? [meals[mealType] || []] : Object.values(meals || {});
+            mealEntries.flat().forEach(food => {
+              if (!food || !food.name) return;
+              if (!counts[food.name]) counts[food.name] = { food, count: 0 };
+              counts[food.name].count += 1;
+            });
+          });
+          return Object.values(counts)
+            .sort((a, b) => b.count - a.count)
+            .slice(0, limit);
+        };
+
+        const getRecentFoods = (limit = 6) => {
+          const seen = new Set();
+          const recent = [];
+          getNutritionHistory().forEach(([, meals]) => {
+            Object.values(meals || {}).flat().forEach(food => {
+              if (!food || !food.name || seen.has(food.name)) return;
+              seen.add(food.name);
+              recent.push(food);
+            });
+          });
+          return recent.slice(0, limit);
+        };
+
+        const getYesterdayMeal = (mealType) => {
+          const yesterdayMeals = (nutritionData && nutritionData[getYesterdayKey()]) || null;
+          return yesterdayMeals ? (yesterdayMeals[mealType] || []) : [];
+        };
+
+        const copyYesterdayMeal = (mealType) => {
+          const yesterdayFoods = getYesterdayMeal(mealType);
+          if (yesterdayFoods.length === 0) return;
+          const updatedMeals = {
+            ...todaysMeals,
+            [mealType]: [...todaysMeals[mealType], ...yesterdayFoods]
+          };
+          const updatedNutrition = {
+            ...nutritionData,
+            [todayKey]: updatedMeals
+          };
+          setNutritionData(updatedNutrition);
+          localStorage.setItem('vita-nutrition', JSON.stringify(updatedNutrition));
+        };
+
+        const frequentFoods = getFrequentFoods(null, 8);
+        const recentFoods = getRecentFoods(8);
 
         // Filter foods based on search term
         const filterFoods = (foods) => {
@@ -4247,15 +4306,90 @@
                 </div>
               </div>
 
+              {(frequentFoods.length > 0 || recentFoods.length > 0) && (
+                <div className="bg-slate-800 rounded-xl p-5 mb-6 border border-slate-700">
+                  <div className="flex justify-between items-center mb-3">
+                    <div>
+                      <h3 className="text-lg font-bold text-amber-400">Quick Add</h3>
+                      <p className="text-xs text-gray-400">Based on foods you usually log</p>
+                    </div>
+                    <select
+                      value={selectedMeal}
+                      onChange={(e) => setSelectedMeal(e.target.value)}
+                      className="p-2 bg-slate-700 rounded text-white text-sm"
+                    >
+                      <option value="breakfast">Breakfast</option>
+                      <option value="lunch">Lunch</option>
+                      <option value="dinner">Dinner</option>
+                      <option value="snacks">Snacks</option>
+                    </select>
+                  </div>
+
+                  {frequentFoods.length > 0 && (
+                    <div className="mb-4">
+                      <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">Most common</p>
+                      <div className="flex gap-2 overflow-x-auto pb-1">
+                        {frequentFoods.map(({ food, count }) => (
+                          <button
+                            key={`freq-${food.name}`}
+                            onClick={() => addFoodToMeal(food, selectedMeal, { closeModal: false })}
+                            className="shrink-0 px-3 py-2 bg-slate-700 rounded-lg hover:bg-slate-600 text-left min-w-[150px]"
+                          >
+                            <div className="text-sm font-medium text-white truncate">{food.name}</div>
+                            <div className="text-xs text-gray-400">{food.calories} cal • used {count}x</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {recentFoods.length > 0 && (
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">Recent</p>
+                      <div className="flex gap-2 overflow-x-auto pb-1">
+                        {recentFoods.map(food => (
+                          <button
+                            key={`recent-${food.name}`}
+                            onClick={() => addFoodToMeal(food, selectedMeal, { closeModal: false })}
+                            className="shrink-0 px-3 py-2 bg-slate-700 rounded-lg hover:bg-slate-600 text-left min-w-[150px]"
+                          >
+                            <div className="text-sm font-medium text-white truncate">{food.name}</div>
+                            <div className="text-xs text-gray-400">{food.calories} cal • P:{food.protein}g</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Meal Sections */}
               <div className="space-y-4 mb-6">
                 {['breakfast', 'lunch', 'dinner', 'snacks'].map(mealType => (
                   <div key={mealType} className="bg-slate-800 rounded-xl p-4 border border-slate-700">
                     <div className="flex justify-between items-center mb-3">
-                      <h3 className="font-bold capitalize text-amber-400">{mealType}</h3>
-                      <span className="text-sm text-gray-400">
-                        {todaysMeals[mealType].reduce((sum, food) => sum + (food.calories || 0), 0)} cal
-                      </span>
+                      <div>
+                        <h3 className="font-bold capitalize text-amber-400">{mealType}</h3>
+                        <span className="text-sm text-gray-400">
+                          {todaysMeals[mealType].reduce((sum, food) => sum + (food.calories || 0), 0)} cal
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        {getYesterdayMeal(mealType).length > 0 && todaysMeals[mealType].length === 0 && (
+                          <button
+                            onClick={() => copyYesterdayMeal(mealType)}
+                            className="px-3 py-1 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700"
+                          >
+                            Same as yesterday
+                          </button>
+                        )}
+                        <button
+                          onClick={() => { setSelectedMeal(mealType); setShowAddFood(true); }}
+                          className="px-3 py-1 bg-amber-600 text-white rounded text-xs hover:bg-amber-700"
+                        >
+                          + Add
+                        </button>
+                      </div>
                     </div>
                     {todaysMeals[mealType].length === 0 ? (
                       <p className="text-gray-500 text-sm italic">No foods logged yet</p>
@@ -4277,6 +4411,22 @@
                             </button>
                           </div>
                         ))}
+                      </div>
+                    )}
+                    {getFrequentFoods(mealType, 4).length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-slate-700">
+                        <p className="text-xs text-gray-500 mb-2">Usually for {mealType}</p>
+                        <div className="flex gap-2 overflow-x-auto pb-1">
+                          {getFrequentFoods(mealType, 4).map(({ food, count }) => (
+                            <button
+                              key={`${mealType}-quick-${food.name}`}
+                              onClick={() => addFoodToMeal(food, mealType, { closeModal: false })}
+                              className="shrink-0 px-2 py-1 bg-slate-700 rounded text-xs hover:bg-slate-600 text-gray-200"
+                            >
+                              + {food.name} <span className="text-gray-500">({count}x)</span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -4329,6 +4479,31 @@
                         </button>
                       )}
                     </div>
+
+                    <details className="mb-4 bg-slate-900/60 rounded-lg border border-slate-700">
+                      <summary className="cursor-pointer p-3 text-sm text-amber-400">Can't find it? Add quick custom food</summary>
+                      <div className="p-3 pt-0">
+                        <input
+                          type="text"
+                          value={customFood.name}
+                          onChange={(e) => setCustomFood({ ...customFood, name: e.target.value })}
+                          placeholder="Food name"
+                          className="w-full p-2 bg-slate-700 rounded text-white placeholder-gray-400 text-sm mb-2"
+                        />
+                        <div className="grid grid-cols-4 gap-2 mb-2">
+                          <input type="number" value={customFood.calories} onChange={(e) => setCustomFood({ ...customFood, calories: e.target.value })} placeholder="Cal" className="p-2 bg-slate-700 rounded text-white placeholder-gray-400 text-sm" />
+                          <input type="number" value={customFood.protein} onChange={(e) => setCustomFood({ ...customFood, protein: e.target.value })} placeholder="P" className="p-2 bg-slate-700 rounded text-white placeholder-gray-400 text-sm" />
+                          <input type="number" value={customFood.carbs} onChange={(e) => setCustomFood({ ...customFood, carbs: e.target.value })} placeholder="C" className="p-2 bg-slate-700 rounded text-white placeholder-gray-400 text-sm" />
+                          <input type="number" value={customFood.fat} onChange={(e) => setCustomFood({ ...customFood, fat: e.target.value })} placeholder="F" className="p-2 bg-slate-700 rounded text-white placeholder-gray-400 text-sm" />
+                        </div>
+                        <button
+                          onClick={addCustomFood}
+                          className="w-full py-2 bg-emerald-600 text-white rounded text-sm hover:bg-emerald-700"
+                        >
+                          Add Custom Food to {selectedMeal}
+                        </button>
+                      </div>
+                    </details>
 
                     <div className="space-y-4 max-h-80 overflow-y-auto">
                       {Object.entries(foodDatabase).map(([category, foods]) => {
@@ -6874,8 +7049,6 @@
       const total = allTasks.length;
       const done = data.done ? data.done.filter(id => allTasks.some(t => t.id === id)).length : 0;
       const streak = getStreak();
-      const hasFocus = focusTasks && focusTasks.length > 0;
-      const focusDone = hasFocus ? focusTasks.filter(id => data.done.includes(id)).length : 0;
       const morningBrief = getMorningBrief();
       const todaySleepData = loadSleepData();
       const todayPrompt = getTodaysPrompt();
@@ -7048,57 +7221,6 @@
               </div>
             )}
 
-            {/* Focus Mode — pick up to 5 tasks, or show focus progress */}
-            <div className="bg-slate-800 rounded-xl p-5 mb-6 border border-slate-700">
-              {!hasFocus ? (
-                <div>
-                  <h3 className="text-lg font-bold mb-1 text-amber-400">Pick today's focus</h3>
-                  <p className="text-xs text-gray-400 mb-3">Choose up to 5 tasks that matter most today</p>
-                  <div className="space-y-2">
-                    {allTasks.map(t => (
-                      <div key={t.id} onClick={() => toggleFocusTask(t.id)} className={`p-3 rounded-lg cursor-pointer flex items-center justify-between ${(focusTasks || []).includes(t.id) ? 'bg-amber-900/60 border border-amber-500' : 'bg-slate-700 hover:bg-slate-600'}`}>
-                        <span className="text-sm">{t.t}</span>
-                        {(focusTasks || []).includes(t.id) && <span className="text-amber-400 text-sm">Selected</span>}
-                      </div>
-                    ))}
-                  </div>
-                  {(focusTasks || []).length > 0 && (
-                    <p className="text-center text-sm text-amber-400 mt-3">{(focusTasks || []).length}/5 selected — start checking them off below</p>
-                  )}
-                </div>
-              ) : (
-                <div>
-                  <div className="flex justify-between items-center mb-3">
-                    <h3 className="text-lg font-bold text-amber-400">Today's Focus</h3>
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl font-bold text-amber-400">{focusDone}/{focusTasks.length}</span>
-                      <button onClick={() => { setFocusTasks(null); localStorage.removeItem('vita-focus-tasks'); }} className="text-xs text-gray-500 hover:text-gray-300">Edit</button>
-                    </div>
-                  </div>
-                  <div className="w-full bg-slate-700 rounded-full h-3 mb-4">
-                    <div className={`h-3 rounded-full transition-all duration-500 ${focusDone === focusTasks.length ? 'bg-green-500' : 'bg-amber-500'}`} style={{ width: `${(focusDone/focusTasks.length)*100}%` }} />
-                  </div>
-                  {focusDone === focusTasks.length && focusTasks.length > 0 && (
-                    <div className="text-center mb-3 py-2 bg-green-900/40 rounded-lg border border-green-700/50">
-                      <span className="text-green-300 font-medium">Focus complete — great day</span>
-                    </div>
-                  )}
-                  {focusTasks.map(id => {
-                    const t = allTasks.find(x => x.id === id);
-                    if (!t) return null;
-                    return (
-                      <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer transition-all ${data.done.includes(t.id) ? 'bg-green-900 border-2 border-green-500' : 'bg-slate-700 hover:bg-slate-600'}`}>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm">{t.t}</span>
-                          {data.done.includes(t.id) ? <span>✅</span> : <span className="text-slate-500">○</span>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
             {/* Quick log: Mood + Energy */}
             <div className="bg-slate-800 rounded-xl p-5 mb-6 border border-slate-700">
               <h3 className="mb-3 text-sm font-medium text-gray-400">Mood & Energy</h3>
@@ -7145,72 +7267,8 @@
               </div>
             </div>
 
-            {/* All Tasks — collapsed by default when focus mode is active */}
-            {hasFocus && (
-              <details className="mb-6">
-                <summary className="bg-slate-800 rounded-xl p-4 border border-slate-700 cursor-pointer text-gray-400 text-sm">
-                  All Tasks ({done}/{total} complete) — tap to expand
-                </summary>
-                <div className="mt-2 space-y-4">
-                  {visibleCoreTasks.length > 0 && (
-                    <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
-                      <h3 className="mb-3 text-sm font-medium text-gray-400">Non-Negotiables</h3>
-                      {visibleCoreTasks.map(t => (
-                        <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-green-900 border-2 border-green-500' : 'bg-slate-700'}`}>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm">{t.t}</span>
-                            {data.done.includes(t.id) && <span>✅</span>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {visibleLeadTasks.length > 0 && (
-                    <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
-                      <h3 className="mb-3 text-sm font-medium text-gray-400">Leadership</h3>
-                      {visibleLeadTasks.map(t => (
-                        <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-amber-900 border-2 border-amber-500' : 'bg-slate-700'}`}>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm">{t.t}</span>
-                            {data.done.includes(t.id) && <span>✅</span>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {visibleCommTasks.length > 0 && (
-                    <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
-                      <h3 className="mb-3 text-sm font-medium text-gray-400">Communication</h3>
-                      {visibleCommTasks.map(t => (
-                        <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-purple-900 border-2 border-purple-500' : 'bg-slate-700'}`}>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm">{t.t}</span>
-                            {data.done.includes(t.id) && <span>✅</span>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {customTasks.filter(t => !hiddenTasks.includes(t.id)).length > 0 && (
-                    <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
-                      <h3 className="mb-3 text-sm font-medium text-gray-400">My Tasks</h3>
-                      {customTasks.filter(t => !hiddenTasks.includes(t.id)).map(t => (
-                        <div key={t.id} onClick={() => toggle(t.id)} className={`p-3 rounded-lg mb-2 cursor-pointer ${data.done.includes(t.id) ? 'bg-cyan-900 border-2 border-cyan-500' : 'bg-slate-700'}`}>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm">{t.t}</span>
-                            {data.done.includes(t.id) && <span>✅</span>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </details>
-            )}
-
-            {/* Show all tasks without collapsing when no focus selected */}
-            {!hasFocus && (
-              <div className="space-y-4 mb-6">
+            {/* Tasks */}
+            <div className="space-y-4 mb-6">
                 {visibleCoreTasks.length > 0 && (
                   <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
                     <h3 className="mb-3 text-sm font-medium text-gray-400">Non-Negotiables</h3>
@@ -7263,8 +7321,7 @@
                     ))}
                   </div>
                 )}
-              </div>
-            )}
+            </div>
 
             {/* Body Weight Tracking */}
             <div className="bg-slate-800 rounded-xl p-5 mb-6 border border-slate-700">
