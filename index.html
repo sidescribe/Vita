@@ -43,6 +43,44 @@
       return `${y}-${m}-${day}`;
     }
 
+    function coerceExerciseWeightsToArray(raw) {
+      if (raw == null || raw === '') return [];
+      return Array.isArray(raw) ? raw : [raw];
+    }
+
+    function finiteNumsFromExerciseWeights(raw) {
+      return coerceExerciseWeightsToArray(raw)
+        .map(v => parseFloat(String(v)))
+        .filter(n => Number.isFinite(n));
+    }
+
+    /** Best prior weights for workout UI: PR max and previous session per set (history newest-first). */
+    function getExerciseLiftHints(history, exerciseName, calendarToday) {
+      const completedSessions = [];
+      for (let i = 0; i < history.length; i++) {
+        const d = history[i];
+        if (!d.workoutDone || !d.weights) continue;
+        if (finiteNumsFromExerciseWeights(d.weights[exerciseName]).length === 0) continue;
+        completedSessions.push(d);
+      }
+      let allTimeMax = null;
+      for (let i = 0; i < completedSessions.length; i++) {
+        const nums = finiteNumsFromExerciseWeights(completedSessions[i].weights[exerciseName]);
+        const m = Math.max(...nums);
+        if (allTimeMax === null || m > allTimeMax) allTimeMax = m;
+      }
+      const prevDay = completedSessions.find(d => d.date !== calendarToday);
+      let prevSessionBySet = [];
+      let prevSessionDate = null;
+      if (prevDay) {
+        prevSessionDate = prevDay.date;
+        prevSessionBySet = coerceExerciseWeightsToArray(prevDay.weights[exerciseName]).map(w =>
+          String(w == null ? '' : w).trim()
+        );
+      }
+      return { allTimeMax, prevSessionDate, prevSessionBySet };
+    }
+
     function VitaApp() {
       console.log('VitaApp component starting...');
       const [view, setView] = useState('today');
@@ -1636,18 +1674,36 @@
                       const setMatch = e.match(/(\d+)x\d+/);
                       const numSets = setMatch ? parseInt(setMatch[1]) : 1;
                       const exerciseWeights = weights[e] || [];
+                      const { allTimeMax, prevSessionDate, prevSessionBySet } = getExerciseLiftHints(history, e, today);
+                      const prevLabel = prevSessionDate
+                        ? `Last time (${prevSessionDate}):`
+                        : null;
 
                       return (
                         <div key={i} className={`bg-slate-700 rounded-lg p-4 ${data.workoutDone ? 'opacity-75' : ''}`}>
-                          <div className="font-medium mb-3 flex items-center justify-between">
+                          <div className="font-medium mb-2 flex items-center justify-between gap-2">
                             <span>{e}</span>
-                            {data.workoutDone && exerciseWeights.length > 0 && <span className="text-green-400 text-sm">✓ Saved</span>}
+                            {data.workoutDone && exerciseWeights.length > 0 && <span className="text-green-400 text-sm shrink-0">✓ Saved</span>}
                           </div>
+                          {(allTimeMax !== null || prevLabel) && (
+                            <div className="mb-3 space-y-1 text-xs text-amber-200/90">
+                              {allTimeMax !== null && (
+                                <div>Heaviest logged (any set): <span className="font-semibold text-amber-100">{allTimeMax} lbs</span></div>
+                              )}
+                              {prevLabel &&
+                                prevSessionBySet.some(cell => cell !== '') && (
+                                <div className="text-gray-400">
+                                  {prevLabel}{' '}
+                                  <span className="text-slate-200">{prevSessionBySet.filter(Boolean).join(' / ')} lbs</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
 
                           <div className="space-y-2">
                             {Array.from({ length: numSets }, (_, setIndex) => (
-                              <div key={setIndex} className="flex items-center gap-2">
-                                <span className="text-xs text-gray-400 w-12">Set {setIndex + 1}:</span>
+                              <div key={setIndex} className="flex flex-wrap items-center gap-2">
+                                <span className="text-xs text-gray-400 w-12 shrink-0">Set {setIndex + 1}:</span>
                                 <input
                                   type="number"
                                   placeholder="Weight (lbs)"
@@ -1657,17 +1713,22 @@
                                     newWeights[setIndex] = ev.target.value;
                                     setWeights({...weights, [e]: newWeights});
                                   }}
-                                  className={`flex-1 p-2 bg-slate-600 rounded text-sm text-white ${data.workoutDone ? 'cursor-not-allowed' : ''}`}
+                                  className={`flex-1 min-w-[120px] p-2 bg-slate-600 rounded text-sm text-white ${data.workoutDone ? 'cursor-not-allowed' : ''}`}
                                   disabled={data.workoutDone}
                                 />
-                                <span className="text-xs text-gray-500">lbs</span>
+                                <span className="text-xs text-gray-500 shrink-0">lbs</span>
+                                {prevSessionDate && prevSessionBySet[setIndex] !== undefined && prevSessionBySet[setIndex] !== '' ? (
+                                  <span className="text-xs text-amber-200/70 ml-auto md:ml-0">was {prevSessionBySet[setIndex]} lbs</span>
+                                ) : prevSessionDate ? (
+                                  <span className="text-xs text-slate-500 ml-auto md:ml-0">—</span>
+                                ) : null}
                               </div>
                             ))}
                           </div>
 
                           {data.workoutDone && exerciseWeights.length > 0 && (
                             <div className="mt-2 text-xs text-gray-400">
-                              Previous: {exerciseWeights.join(', ')} lbs
+                              Today logged: {exerciseWeights.filter(w => String(w).trim() !== '').join(', ')} lbs
                             </div>
                           )}
                         </div>
