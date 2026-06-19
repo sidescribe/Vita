@@ -21,10 +21,10 @@
   <link rel="icon" href="favicon.ico" type="image/x-icon" />
 
   <title>Vita — Personal Development Tracker</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
-  <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com/3.4.1"></script>
+  <script crossorigin src="https://unpkg.com/react@17/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
   <style>
     body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
   </style>
@@ -32,7 +32,7 @@
 <body class="bg-slate-900 text-gray-200">
   <div id="root"></div>
 
-  <script type="text/babel">
+  <script type="text/babel" data-presets="react">
     const { useState, useEffect } = React;
 
     function getTodayLocal() {
@@ -79,6 +79,21 @@
         );
       }
       return { allTimeMax, prevSessionDate, prevSessionBySet };
+    }
+
+    function validateDataIntegrity() {
+      const requiredKeys = [
+        'vita-history',
+        'vita-nutrition',
+        'vita-knowledge-base',
+        'vita-challenges',
+        'vita-badges'
+      ];
+      const missingKeys = requiredKeys.filter(key => !localStorage.getItem(key));
+      if (missingKeys.length > 0) {
+        console.warn('Missing data keys:', missingKeys);
+      }
+      return missingKeys.length === 0;
     }
 
     function VitaApp() {
@@ -4295,26 +4310,6 @@
           reader.readAsText(file);
         };
 
-        // Data integrity check
-        const validateDataIntegrity = () => {
-          const requiredKeys = [
-            'vita-history',
-            'vita-nutrition',
-            'vita-knowledge-base',
-            'vita-challenges',
-            'vita-badges'
-          ];
-
-          const missingKeys = requiredKeys.filter(key => !localStorage.getItem(key));
-          if (missingKeys.length > 0) {
-            console.warn('Missing data keys:', missingKeys);
-            // Could show a warning notification to user
-          }
-
-          return missingKeys.length === 0;
-        };
-
-
         return (
           <div className="min-h-screen p-4">
             <div className="max-w-4xl mx-auto">
@@ -7535,7 +7530,15 @@
       );
     }
 
-    ReactDOM.render(<VitaApp />, document.getElementById('root'));
+    try {
+      ReactDOM.render(<VitaApp />, document.getElementById('root'));
+    } catch (err) {
+      console.error('Vita failed to start:', err);
+      const root = document.getElementById('root');
+      if (root) {
+        root.innerHTML = '<div style="padding:24px;color:#e2e8f0;font-family:sans-serif;max-width:640px;margin:40px auto;"><h1 style="color:#f59e0b;">Vita failed to load</h1><p>Try a hard refresh (Ctrl+Shift+R). If this persists, clear site data for this page and reload.</p><pre style="background:#1e293b;padding:12px;border-radius:8px;overflow:auto;font-size:12px;">' + String(err && err.message ? err.message : err) + '</pre></div>';
+      }
+    }
 
     // Register Service Worker for PWA functionality
     if ('serviceWorker' in navigator) {
