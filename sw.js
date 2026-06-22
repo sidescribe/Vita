@@ -1,17 +1,14 @@
-const STATIC_CACHE = 'vita-static-v1.3.0';
-const DYNAMIC_CACHE = 'vita-dynamic-v1.3.0';
+const STATIC_CACHE = 'vita-static-v1.4.0';
+const DYNAMIC_CACHE = 'vita-dynamic-v1.4.0';
 
+// Same-origin only — CDN scripts cannot be cached by the service worker (CORS).
 const STATIC_ASSETS = [
-  '/Vita/',
-  '/Vita/index.html',
-  '/Vita/app.js',
-  '/Vita/manifest.json',
-  '/Vita/icon-192.svg',
-  '/Vita/icon-512.svg',
-  '/Vita/sw.js',
-  'https://cdn.tailwindcss.com',
-  'https://unpkg.com/react@17/umd/react.production.min.js',
-  'https://unpkg.com/react-dom@17/umd/react-dom.production.min.js'
+  './',
+  './index.html',
+  './app.js',
+  './manifest.json',
+  './icon-192.svg',
+  './icon-512.svg'
 ];
 
 self.addEventListener('install', (event) => {
@@ -19,6 +16,10 @@ self.addEventListener('install', (event) => {
     caches.open(STATIC_CACHE)
       .then((cache) => cache.addAll(STATIC_ASSETS))
       .then(() => self.skipWaiting())
+      .catch((err) => {
+        console.warn('SW install cache skipped:', err);
+        return self.skipWaiting();
+      })
   );
 });
 
@@ -38,36 +39,20 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  if (url.origin !== location.origin) {
+  if (url.origin !== location.origin || request.method !== 'GET') {
     return;
   }
 
-  if (request.method !== 'GET') {
-    return;
-  }
-
-  if (STATIC_ASSETS.some(asset => request.url.includes(asset))) {
-    event.respondWith(
-      caches.match(request)
-        .then((response) => response || fetch(request).then((response) => {
-          if (!response.ok) return response;
-          const responseClone = response.clone();
-          caches.open(STATIC_CACHE).then((cache) => cache.put(request, responseClone));
-          return response;
-        }))
-        .catch(() => caches.match('/Vita/index.html'))
-    );
-  } else {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const responseClone = response.clone();
-            caches.open(DYNAMIC_CACHE).then((cache) => cache.put(request, responseClone));
-          }
-          return response;
-        })
-        .catch(() => caches.match(request))
-    );
-  }
+  event.respondWith(
+    caches.match(request).then((cached) => {
+      if (cached) return cached;
+      return fetch(request).then((response) => {
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(DYNAMIC_CACHE).then((cache) => cache.put(request, clone));
+        }
+        return response;
+      });
+    }).catch(() => caches.match('./index.html'))
+  );
 });
