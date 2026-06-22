@@ -13,12 +13,12 @@
   <meta name="apple-mobile-web-app-title" content="Vita" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="format-detection" content="telephone=no" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 
   <!-- PWA Manifest and Icons -->
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon-192.svg" />
   <link rel="icon" href="icon-192.svg" type="image/svg+xml" />
-  <link rel="icon" href="favicon.ico" type="image/x-icon" />
 
   <title>Vita — Personal Development Tracker</title>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -29,9 +29,28 @@
   </style>
 </head>
 <body class="bg-slate-900 text-gray-200">
+  <script>
+    (function () {
+      var BUILD = 'v2-precompiled';
+      try {
+        if (localStorage.getItem('vita-build') === BUILD) return;
+        localStorage.setItem('vita-build', BUILD);
+      } catch (e) {}
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          regs.forEach(function (r) { r.unregister(); });
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then(function (keys) {
+          keys.forEach(function (k) { caches.delete(k); });
+        });
+      }
+    })();
+  </script>
   <div id="root"></div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=2"></script>
 
 
 <!-- Standalone initializers: ensure tracker and encapsulated notes render on page load -->

@@ -13,6 +13,8 @@ const { code } = babel.transform(source, {
   filename: 'app.jsx'
 });
 
-const banner = '/* Auto-generated from index.html — do not edit by hand; edit the inline source or rebuild */\n';
+const banner = '/* Auto-generated from app.source.jsx — run: node build-app.js */\n';
 fs.writeFileSync(path.join(__dirname, 'app.js'), banner + code, 'utf8');
 console.log('Wrote app.js (' + (banner.length + code.length) + ' bytes)');
+
+require('child_process').execSync('node sync-docs.js', { cwd: __dirname, stdio: 'inherit' });
