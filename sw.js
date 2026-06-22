@@ -1,17 +1,17 @@
-const STATIC_CACHE = 'vita-static-v1.2.0';
-const DYNAMIC_CACHE = 'vita-dynamic-v1.2.0';
+const STATIC_CACHE = 'vita-static-v1.3.0';
+const DYNAMIC_CACHE = 'vita-dynamic-v1.3.0';
 
 const STATIC_ASSETS = [
   '/Vita/',
   '/Vita/index.html',
+  '/Vita/app.js',
   '/Vita/manifest.json',
   '/Vita/icon-192.svg',
   '/Vita/icon-512.svg',
   '/Vita/sw.js',
-  'https://cdn.tailwindcss.com/3.4.1',
+  'https://cdn.tailwindcss.com',
   'https://unpkg.com/react@17/umd/react.production.min.js',
-  'https://unpkg.com/react-dom@17/umd/react-dom.production.min.js',
-  'https://unpkg.com/@babel/standalone@7.26.10/babel.min.js'
+  'https://unpkg.com/react-dom@17/umd/react-dom.production.min.js'
 ];
 
 self.addEventListener('install', (event) => {
